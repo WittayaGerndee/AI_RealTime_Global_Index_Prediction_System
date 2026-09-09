@@ -1,0 +1,36 @@
+name: Scheduled Walk-Forward Backtest
+
+on:
+  schedule:
+    # Run every weekday at 23:00 UTC (after US/Asian market close)
+    - cron: '0 23 * * 1-5'
+  workflow_dispatch:
+
+jobs:
+  run-backtest:
+    name: Run Walk-Forward Validation
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - name: Install Dependencies
+        run: |
+          pip install -r backend/requirements.txt
+
+      - name: Execute Walk-Forward Evaluation
+        run: |
+          python -m backtest.cli
+
+      - name: Archive Backtest Report
+        uses: actions/upload-artifact@v4
+        with:
+          name: daily-backtest-report
+          path: reports/daily_backtest.json
+          retention-days: 30

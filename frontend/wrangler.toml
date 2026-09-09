@@ -1,0 +1,7 @@
+name = "ai-global-index-prediction"
+compatibility_date = "2024-09-01"
+pages_build_output_dir = "dist"
+
+[vars]
+ENVIRONMENT = "production"
+VITE_STANDALONE_DEMO_ENABLED = "true"

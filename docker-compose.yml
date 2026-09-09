@@ -1,0 +1,104 @@
+services:
+  # 1. TimescaleDB (PostgreSQL 16 + TimescaleDB Extension)
+  postgres:
+    image: timescale/timescaledb:latest-pg16
+    container_name: global_index_timescaledb
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres_secure_password}
+      POSTGRES_DB: ${POSTGRES_DB:-global_index_ai}
+    ports:
+      - "5432:5432"
+    volumes:
+      - timescale_data:/var/lib/postgresql/data
+      - ./docker/init_timescale.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-global_index_ai}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # 2. Redis Cache & Real-time Pub/Sub
+  redis:
+    image: redis:7-alpine
+    container_name: global_index_redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # 3. FastAPI Backend Service & WebSocket Server
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    container_name: global_index_backend
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    env_file:
+      - .env
+    ports:
+      - "8000:8000"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/system/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
+  # 4. Market Data Collector Daemon
+  data-collector:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    container_name: global_index_data_collector
+    restart: unless-stopped
+    command: ["python", "-m", "data_collector.collector_service"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    env_file:
+      - .env
+
+  # 5. Real-Time Prediction & Evaluation Engine
+  prediction-engine:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    container_name: global_index_prediction_engine
+    restart: unless-stopped
+    command: ["python", "-m", "prediction_engine.inference.service"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    env_file:
+      - .env
+
+  # 6. Cloudflare Tunnel (cloudflared) - Expose backend safely to Cloudflare
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: global_index_cloudflared
+    restart: unless-stopped
+    command: tunnel --no-autoupdate run
+    environment:
+      TUNNEL_TOKEN: ${CLOUDFLARE_TUNNEL_TOKEN:-}
+    depends_on:
+      - backend
+
+volumes:
+  timescale_data:
+  redis_data:
