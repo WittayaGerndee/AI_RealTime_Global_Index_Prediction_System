@@ -15,6 +15,48 @@
     <div v-else-if="!dataset" class="rounded-2xl border border-gray-800 bg-dark-800 p-6 text-sm text-gray-400">กำลังโหลดผลหวยย้อนหลัง...</div>
 
     <template v-else>
+      <!-- Most frequent numbers for the next draw's weekday -->
+      <div class="rounded-2xl border border-amber-500/40 bg-amber-500/5 p-5 space-y-4">
+        <div class="flex flex-wrap items-baseline justify-between gap-2">
+          <h2 class="text-base font-bold text-white">
+            เลขที่ออกบ่อยของวัน{{ WEEKDAY_LABELS[nextDraw.weekday] }} <span class="text-amber-300">(สถิติ {{ years }} ปี)</span>
+          </h2>
+          <span class="text-xs text-gray-400">
+            งวด {{ thaiDate(nextDraw.date, true) }} • จาก {{ nextDrawDraws.length }} งวดวัน{{ WEEKDAY_LABELS[nextDraw.weekday] }}ในอดีต
+          </span>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div v-for="group in nextDrawGroups" :key="group.label" class="rounded-xl border border-gray-800 bg-dark-900 p-4 space-y-3">
+            <div class="text-xs text-gray-400">{{ group.label }}</div>
+            <div class="flex flex-wrap gap-2">
+              <div
+                v-for="t in group.top"
+                :key="t.number"
+                class="rounded-lg bg-amber-500/15 border border-amber-500/30 px-3 py-2 text-center min-w-[64px]"
+              >
+                <div class="font-mono font-bold text-2xl text-amber-300 tracking-wider">{{ t.number }}</div>
+                <div class="text-[10px] text-gray-400">{{ t.count }} ครั้ง</div>
+              </div>
+              <div v-if="!group.top.length" class="text-xs text-gray-500">ยังไม่มีข้อมูลของวันนี้</div>
+            </div>
+            <div class="text-[11px] text-gray-400">
+              ทดสอบย้อนหลัง {{ group.backtest.trials }} งวด: ถ้าเลือก {{ group.backtest.picks }} เลขที่ออกบ่อยสุดของวันนั้นทุกงวด
+              ถูกจริง <span class="font-mono text-amber-300">{{ group.backtest.hitRate.toFixed(1) }}%</span> •
+              เลือกเลขมั่ว ๆ ถูก <span class="font-mono text-gray-200">{{ group.backtest.expectedRate.toFixed(1) }}%</span>
+              <span :class="group.backtest.pValue < 0.05 ? 'text-rose-300' : 'text-emerald-400'">
+                ({{ group.backtest.pValue < 0.05 ? 'ต่างจากสุ่ม' : 'ไม่ต่างจากการสุ่ม' }})
+              </span>
+            </div>
+          </div>
+        </div>
+
+        <p class="text-[11px] text-gray-400">
+          นี่คือเลขที่เคยออกบ่อยในอดีต ไม่ใช่เลขที่มีโอกาสออกมากกว่าเลขอื่น — ตามผลทดสอบย้อนหลัง
+          การเลือกเลขเหล่านี้มีโอกาสถูกไม่ต่างจากการเลือกเลขใดก็ได้
+        </p>
+      </div>
+
       <!-- Summary -->
       <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <div class="bg-dark-800 rounded-2xl border border-gray-800 p-4">
@@ -195,16 +237,6 @@
           ผลที่ "ต่างจากการสุ่ม" เพียงรายการเดียวจึงยังไม่ใช่หลักฐานว่ามีรูปแบบจริง
         </p>
 
-        <div class="rounded-xl border border-gray-800 bg-dark-900 p-4 text-xs space-y-1.5">
-          <div class="text-gray-300">
-            งวดถัดไป: <strong class="text-white">{{ thaiDate(nextDraw.date, true) }}</strong> •
-            เลขท้าย 2 ตัวที่ออกบ่อยที่สุดในอดีตของวัน{{ WEEKDAY_LABELS[nextDraw.weekday] }}:
-            <span class="font-mono text-amber-300 font-bold">{{ nextDrawTop.map((t) => t.number).join(', ') || '—' }}</span>
-          </div>
-          <div class="text-gray-500">
-            นี่คือสถิติในอดีต ไม่ใช่การทำนาย ตามผลทดสอบด้านบน การเลือกเลขเหล่านี้มีโอกาสถูกไม่ต่างจากการเลือกเลขใดก็ได้
-          </div>
-        </div>
       </div>
 
       <!-- Results table -->
@@ -254,6 +286,7 @@ import {
   last2,
   last3,
   countTwoDigit,
+  countThreeDigit,
   countDigits,
   topNumbers,
   uniformityTest,
@@ -359,7 +392,7 @@ const backtests = computed(() => {
     backtestHotNumbers(draws, last2, 100, 1, 'เลข 2 ตัว • เลือก 1 เลขที่ออกบ่อยสุด'),
     backtestHotNumbers(draws, last2, 100, 5, 'เลข 2 ตัว • เลือก 5 เลขที่ออกบ่อยสุด'),
     backtestHotNumbers(draws, last2, 100, 10, 'เลข 2 ตัว • เลือก 10 เลขที่ออกบ่อยสุด'),
-    backtestHotNumbers(draws, last3, 1000, 10, 'เลข 3 ตัว • เลือก 10 เลขที่ออกบ่อยสุด'),
+    backtestHotNumbers(draws, last3, 1000, 5, 'เลข 3 ตัว • เลือก 5 เลขที่ออกบ่อยสุด'),
     backtestHotNumbers(draws, (d) => d.last4[3], 10, 1, 'เลขท้ายตัวเดียว • เลือกตัวที่ออกบ่อยสุด'),
   ];
 });
@@ -374,7 +407,12 @@ const nextDraw = computed(() => {
   return { date, weekday: weekdayOf(date) };
 });
 
-const nextDrawTop = computed(() => topNumbers(countTwoDigit(periodDraws.value.filter((d) => weekdayOf(d.date) === nextDraw.value.weekday)), 5));
+const nextDrawDraws = computed(() => periodDraws.value.filter((d) => weekdayOf(d.date) === nextDraw.value.weekday));
+
+const nextDrawGroups = computed(() => [
+  { label: 'เลขท้าย 2 ตัว', top: topNumbers(countTwoDigit(nextDrawDraws.value), 5).filter((t) => t.count > 0), backtest: backtests.value[1] },
+  { label: 'เลขท้าย 3 ตัว', top: topNumbers(countThreeDigit(nextDrawDraws.value), 5, 3).filter((t) => t.count > 0), backtest: backtests.value[3] },
+]);
 
 const tableDraws = computed(() => {
   const rows = [...selectedDraws.value].reverse();

@@ -108,6 +108,12 @@ export function countTwoDigit(draws: LaoDraw[]): number[] {
   return counts;
 }
 
+export function countThreeDigit(draws: LaoDraw[]): number[] {
+  const counts = Array(1000).fill(0);
+  for (const d of draws) counts[Number(last3(d))]++;
+  return counts;
+}
+
 export function countDigits(draws: LaoDraw[], position: number): number[] {
   const counts = Array(10).fill(0);
   for (const d of draws) counts[Number(d.last4[position])]++;
