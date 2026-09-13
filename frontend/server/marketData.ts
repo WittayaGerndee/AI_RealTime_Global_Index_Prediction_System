@@ -1,11 +1,11 @@
-// Cloudflare Pages Function: GET /market-data?symbol=^HSI
+// GET /market-data?symbol=^HSI
 // Proxies Yahoo Finance 5-minute chart data (the browser cannot call Yahoo directly because of CORS).
-// Also used by the Vite dev server (see vite.config.ts).
+// Served by the Cloudflare Worker (worker/index.ts) and by the Vite dev server (vite.config.ts).
 
 const ALLOWED_SYMBOLS = new Set(['^N225', '^HSI', '399001.SZ', '^DJI']);
 const CACHE_SECONDS = 30;
 
-export async function onRequestGet({ request }: { request: Request }): Promise<Response> {
+export async function handleMarketData(request: Request): Promise<Response> {
   const symbol = new URL(request.url).searchParams.get('symbol') || '';
   if (!ALLOWED_SYMBOLS.has(symbol)) {
     return Response.json({ error: 'Unsupported symbol' }, { status: 400 });
