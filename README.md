@@ -8,7 +8,7 @@
 - **Hang Seng Index (HSI)** - ตลาดฮ่องกง (HKEX)
 - **SZSE Component Index (SZSE)** - ตลาดจีน (Shenzhen Stock Exchange)
 
-ออกแบบและปรับแต่งมาเป็นพิเศษสำหรับการโฮสต์ผ่าน **Cloudflare (Cloudflare Pages + Cloudflare Tunnel) + GitHub (Actions CI/CD)**
+ออกแบบและปรับแต่งมาเป็นพิเศษสำหรับการโฮสต์ผ่าน **Cloudflare (Workers + Cloudflare Tunnel) + GitHub (Actions CI)**
 
 ---
 
@@ -31,11 +31,10 @@
 
 ## สถาปัตยกรรมการโฮสต์ (Cloudflare + GitHub)
 
-- **Frontend**: โฮสต์บน **Cloudflare Pages** (Vue 3 + Vite + Tailwind CSS + ECharts) โหลดเร็ว ปลอดภัย มี Edge CDN ทั่วโลก
+- **Frontend**: โฮสต์บน **Cloudflare Workers (Static Assets)** (Vue 3 + Vite + Tailwind CSS + ECharts) พร้อม endpoint `/market-data` ดึงราคาดัชนีจริงจาก Yahoo Finance ([worker/index.ts](worker/index.ts))
 - **Backend**: Containerized (FastAPI, Redis, TimescaleDB/PostgreSQL, Prediction Engine) เชื่อมต่อสู่สาธารณะผ่าน **Cloudflare Tunnel (`cloudflared`)** โดยไม่ต้องเปิดพอร์ต Router และไม่มีปัญหาเรื่อง Dynamic IP
 - **GitHub Actions**:
   - `ci.yml`: รัน Automated Tests ทุกครั้งที่ Push/PR
-  - `deploy-cloudflare.yml`: Build และ Deploy ขึ้น Cloudflare Pages อัตโนมัติ
   - `backtest.yml`: รัน Walk-Forward Validation ทุกวันตามเวลาปิดตลาด
 
 ดูคู่มือการติดตั้งและ Deploy อย่างละเอียดได้ที่: [docs/CLOUDFLARE_GITHUB_GUIDE.md](file:///Users/wittayagerndee/Docker_Project/www/AI_RealTime_Global_Index_Prediction_System/docs/CLOUDFLARE_GITHUB_GUIDE.md)
@@ -52,7 +51,7 @@ AI_RealTime_Global_Index_Prediction_System/
 ├── feature_engine/            # Technical indicators, S&R engine, regime detector
 ├── prediction_engine/         # Weighted ensemble, intervals, stabilization zone
 ├── backtest/                  # Walk-forward backtesting & accuracy metrics
-├── frontend/                  # Vue 3 + Vite + Tailwind dashboard (Cloudflare Pages)
+├── frontend/                  # Vue 3 + Vite + Tailwind dashboard
 ├── docker/                    # TimescaleDB init SQL schema & Compose files
 ├── docs/                      # Deployment & architectural documentation
 ├── docker-compose.yml         # Full-stack Docker orchestration

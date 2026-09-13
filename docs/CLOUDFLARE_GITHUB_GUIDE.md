@@ -1,7 +1,7 @@
 # คู่มือการติดตั้งและ Deploy บน Cloudflare + GitHub
 ## AI Real-Time Global Index Prediction System
 
-ระบบนี้ออกแบบมาเพื่อรันและ Deploy ร่วมกันระหว่าง **Cloudflare** (Cloudflare Pages + Cloudflare Tunnel) และ **GitHub** (Repository + Actions CI/CD) อย่างมีประสิทธิภาพสูงสุด
+ระบบนี้ Deploy ร่วมกันระหว่าง **Cloudflare** (Workers + Cloudflare Tunnel) และ **GitHub** (Repository + Actions CI)
 
 ---
 
@@ -10,16 +10,16 @@
 ```text
 ┌─────────────────────────────────────────────────────────────┐
 │                      GitHub Repository                       │
-│  - Source code (Frontend, Backend, Engines)                 │
-│  - Workflows: CI Tests, Daily Backtest, Cloudflare Deploy   │
+│  - Source code (Frontend, Worker, Backend, Engines)         │
+│  - Workflows: CI Tests, Daily Backtest                      │
 └──────────────┬───────────────────────────────┬──────────────┘
-               │ (git push / actions)          │ (git clone / pull)
+               │ (git push → Workers Builds)   │ (git clone / pull)
                ▼                               ▼
 ┌───────────────────────────────┐  ┌───────────────────────────────┐
-│       Cloudflare Pages        │  │     Docker Host / VPS         │
-│  - Frontend (Vue 3 + ECharts) │  │  - FastAPI Backend            │
-│  - Global Anycast Edge CDN    │  │  - TimescaleDB + Redis        │
-│  - Standalone / Live Hybrid   │  │  - Data Collector & AI Engine │
+│  Cloudflare Worker            │  │     Docker Host / VPS         │
+│  - Static assets (dist/)      │  │  - FastAPI Backend            │
+│  - /market-data → Yahoo       │  │  - TimescaleDB + Redis        │
+│    Finance (ราคาดัชนีจริง)       │  │  - Data Collector & AI Engine │
 └──────────────▲────────────────┘  │  - cloudflared Tunnel Daemon   │
                │ (HTTPS / WSS)     └───────────────┬───────────────┘
                └───────────────────────────────────┘
@@ -27,45 +27,41 @@
 
 ---
 
-## 2. ขั้นตอนการตั้งค่า GitHub
-
-### 2.1 สร้าง GitHub Repository และ Push Code
+## 2. Push Code ขึ้น GitHub
 ```bash
-git add .
-git commit -m "feat: AI Real-Time Global Index Prediction System v1.0"
 git remote add origin https://github.com/<YOUR_USERNAME>/<REPO_NAME>.git
 git branch -M main
 git push -u origin main
 ```
 
-### 2.2 ตั้งค่า GitHub Secrets สำหรับ Cloudflare (Settings -> Secrets and variables -> Actions)
-เพิ่ม Secrets ดังนี้:
-1. `CLOUDFLARE_API_TOKEN`: API Token จาก Cloudflare Dashboard (มีสิทธิ์ Cloudflare Pages: Edit)
-2. `CLOUDFLARE_ACCOUNT_ID`: Account ID ของคุณใน Cloudflare Dashboard
-3. `CLOUDFLARE_API_URL`: (Optional) เช่น `https://api.yourdomain.com/api` (หากต่อกับ Cloudflare Tunnel)
-4. `CLOUDFLARE_WS_URL`: (Optional) เช่น `wss://api.yourdomain.com/ws`
+GitHub Actions ที่ใช้งาน:
+- `ci.yml`: รัน Backend tests (pytest) และ Build Frontend ทุกครั้งที่ Push/PR
+- `backtest.yml`: รัน Walk-Forward Backtest ทุกวันทำการ
 
 ---
 
-## 3. ขั้นตอนการตั้งค่า Cloudflare Pages
+## 3. Deploy ขึ้น Cloudflare Workers (GitHub Integration)
 
-### วิธีที่ 1: Deploy ผ่าน GitHub Integration (แนะนำที่สุด)
-1. ไปที่ **Cloudflare Dashboard** -> **Workers & Pages** -> **Create application** -> **Pages** -> **Connect to Git**
-2. เลือก Repository ที่คุณเพิ่ง push บน GitHub
-3. ตั้งค่า Build Settings:
-   - **Framework preset**: `Vite`
+การตั้งค่า Worker อยู่ในไฟล์ [`wrangler.jsonc`](../wrangler.jsonc) ที่ root ของ repo:
+- `main`: [`worker/index.ts`](../worker/index.ts) — จัดการ `/market-data` และส่งไฟล์หน้าเว็บ
+- `assets.directory`: `./dist` — ผลลัพธ์จาก `npm run build` (root `package.json` จะ build `frontend/` แล้วคัดลอกมาไว้ที่ `dist/`)
+
+ขั้นตอน:
+1. **Cloudflare Dashboard** → **Workers & Pages** → **Create** → **Import a repository** → เลือก repo นี้
+2. Build settings:
    - **Build command**: `npm run build`
-   - **Build output directory**: `dist`
-   - **Root directory**: `frontend`
-4. ใส่ Environment Variables:
-   - `VITE_STANDALONE_DEMO_ENABLED` = `true`
-   - `VITE_API_BASE_URL` = `https://api.yourdomain.com/api` (หรือปล่อยว่างเพื่อใช้ Standalone Edge Engine)
-   - `VITE_WS_URL` = `wss://api.yourdomain.com/ws`
-5. กด **Save and Deploy**
-   - Cloudflare Pages จะบิลด์และรันเว็บแอพพลิเคชันของคุณทันที พร้อม URL เช่น `https://ai-global-index-prediction.pages.dev`
+   - **Deploy command**: `npx wrangler deploy`
+   - **Root directory**: `/` (root ของ repo)
+3. ชื่อ Worker ต้องตรงกับ `name` ใน `wrangler.jsonc` (`ai-realtime-global-index-prediction-system`)
+4. ทุกครั้งที่ push เข้า `main` Cloudflare จะ build และ deploy ให้อัตโนมัติ
 
-### วิธีที่ 2: Deploy อัตโนมัติผ่าน GitHub Actions
-ไฟล์ `.github/workflows/deploy-cloudflare.yml` มีการตั้งค่าไว้ล่วงหน้าแล้ว ทุกครั้งที่ push โค้ดเข้า branch `main` GitHub Action จะทำการบิลด์และสั่ง `wrangler pages deploy` ขึ้น Cloudflare อัตโนมัติ
+ทดสอบในเครื่องแบบเดียวกับบน Cloudflare:
+```bash
+npm run build
+npx wrangler dev
+```
+
+> หากต้องการต่อกับ Backend ผ่าน Tunnel ให้ตั้ง `VITE_API_BASE_URL` และ `VITE_WS_URL` เป็น Build variables ของ Worker
 
 ---
 
@@ -92,12 +88,12 @@ docker compose up -d
 ```
 หลังจากคำสั่งเสร็จสิ้น:
 - Backend FastAPI และ WebSocket จะสามารถเข้าถึงได้อย่างปลอดภัยผ่าน `https://api.yourdomain.com` ทั่วโลก
-- หน้าเว็บ Cloudflare Pages จะเชื่อมต่อดึงข้อมูล Real-time Ticks และ Predictions จาก Backend ได้ทันที!
+- หน้าเว็บบน Cloudflare จะเชื่อมต่อดึงข้อมูล Real-time Ticks และ Predictions จาก Backend ได้ทันที
 
 ---
 
-## 5. Standalone Edge Mode (Fallback อัจฉริยะ)
+## 5. แหล่งข้อมูลของหน้าเว็บ (ลำดับการเลือกอัตโนมัติ)
 
-หาก Docker Backend บนเครื่องของคุณยังไม่ได้เปิด หรืออยู่ในระหว่างซ่อมบำรุง ระบบ Frontend บน Cloudflare Pages จะสลับเข้าสู่ **Standalone Edge Quant Engine** โดยอัตโนมัติ:
-- ดำเนินการจำลอง Microstructure Ticks และ Candlesticks ของดัชนีทั้ง 4 ตลาด (Nikkei 225, Dow Jones, Hang Seng, SZSE)
-- คำนวณ EMA, Bollinger Bands, Prediction Ranges (50%, 80%, 95%), Stabilization Zones, และรายงาน Accuracy ย้อนหลังได้ทันที 100%
+1. **Backend (Live)** — เมื่อเชื่อมต่อ `VITE_API_BASE_URL` ได้
+2. **ราคาจริง (Yahoo Finance)** — ผ่าน `/market-data` ของ Worker อัปเดตทุก 30 วินาที ใช้คำนวณราคาคาดการณ์ราคาปิดที่ล็อกก่อนปิดตลาด 30 นาที
+3. **ข้อมูลจำลอง (Demo)** — ใช้เมื่อดึงข้อมูลจริงไม่ได้ หน้าเว็บจะแสดงป้าย "โหมดจำลอง" ชัดเจน
