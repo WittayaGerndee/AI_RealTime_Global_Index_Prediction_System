@@ -1,6 +1,7 @@
 import { MarketSummary, Candle, HorizonPrediction, AccuracyReport } from '../types/market';
-import { edgeEngine } from './edgeSimulation';
-import { realEngine } from './realMarketData';
+import { MarketEngine } from './marketEngine';
+import { YahooBarSource } from './yahooSource';
+import { SimulatedBarSource } from './simulatedSource';
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api';
 const WS_BASE = import.meta.env.VITE_WS_URL || 'ws://localhost:8000/ws';
@@ -8,7 +9,9 @@ const WS_BASE = import.meta.env.VITE_WS_URL || 'ws://localhost:8000/ws';
 /** backend: FastAPI stack • real: Yahoo Finance via /market-data • demo: offline simulation */
 export type DataSource = 'backend' | 'real' | 'demo';
 
-type LocalEngine = typeof realEngine | typeof edgeEngine;
+const MODEL_VERSION = 'v2.0-Statistical';
+const realEngine = new MarketEngine(new YahooBarSource(), MODEL_VERSION);
+const demoEngine = new MarketEngine(new SimulatedBarSource(), `${MODEL_VERSION} (demo)`);
 
 class MarketApiClient {
   public isLiveBackend = false;
@@ -21,8 +24,8 @@ class MarketApiClient {
     return realEngine.ready ? 'real' : 'demo';
   }
 
-  private get engine(): LocalEngine {
-    return realEngine.ready ? realEngine : edgeEngine;
+  private get engine(): MarketEngine {
+    return realEngine.ready ? realEngine : demoEngine;
   }
 
   public async checkBackendHealth(): Promise<boolean> {
@@ -41,7 +44,10 @@ class MarketApiClient {
 
   /** Refreshes real market data (throttled); falls back to the simulation when unavailable. */
   public async refreshLocalData(): Promise<void> {
-    if (!this.isLiveBackend) await realEngine.refresh();
+    if (this.isLiveBackend) return;
+    const now = new Date();
+    await realEngine.refresh(now);
+    if (!realEngine.ready) await demoEngine.refresh(now);
   }
 
   public async getMarkets(): Promise<MarketSummary[]> {
@@ -76,8 +82,12 @@ class MarketApiClient {
     }
     const engine = this.engine;
     const out: Record<string, HorizonPrediction> = {};
-    for (const h of [1, 5, 15, 30, 60]) out[`${h}m`] = engine.getPrediction(symbol, h);
-    out['Close'] = engine.getClosePrediction(symbol);
+    for (const h of [1, 5, 15, 30, 60]) {
+      const p = engine.getPrediction(symbol, h);
+      if (p) out[`${h}m`] = p;
+    }
+    const close = engine.getClosePrediction(symbol);
+    if (close) out['Close'] = close;
     return out;
   }
 

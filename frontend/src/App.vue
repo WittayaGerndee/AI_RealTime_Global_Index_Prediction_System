@@ -92,7 +92,7 @@
               <!-- Direction Probabilities Bar -->
               <div v-if="closePrediction" class="pt-3 border-t border-gray-800 space-y-2">
                 <div class="flex items-center justify-between text-xs">
-                  <span class="text-gray-400">ทิศทางถึงราคาปิด:</span>
+                  <span class="text-gray-400">ทิศทางถึงราคาปิด{{ activeSegmentLabel }}:</span>
                   <span class="font-bold text-emerald-400">
                     {{ DIRECTION_LABELS[activeMarket.direction] }} {{ Math.round(activeMarket.direction_probability * 100) }}%
                   </span>
@@ -119,7 +119,7 @@
                 </h3>
               </div>
               <p class="text-xs text-gray-400">
-                กรอบราคาที่คาดว่าราคาปิดจะอยู่ภายใน (ล็อกพร้อมราคาคาดการณ์ก่อนปิดตลาด 30 นาที)
+                กรอบ 50% จากความคลาดเคลื่อนจริงในอดีต — ราคาปิด{{ activeSegmentLabel }}มีโอกาสราวครึ่งหนึ่งที่จะอยู่ในช่วงนี้
               </p>
               <div class="bg-dark-900 rounded-xl p-3 border border-gray-800 flex items-center justify-around font-mono text-center">
                 <div>
@@ -161,10 +161,9 @@ import PredictionTimeline from './components/PredictionTimeline.vue';
 import AccuracyReportModal from './components/AccuracyReportModal.vue';
 import DisclaimerBanner from './components/DisclaimerBanner.vue';
 
-import { MarketSummary, Candle, HorizonPrediction, AccuracyReport } from './types/market';
+import { MarketSummary, Candle, HorizonPrediction, AccuracyReport, SegmentForecast } from './types/market';
 import { apiClient, DataSource } from './api/client';
-import { SYMBOLS } from './api/edgeSimulation';
-import { getSessionState } from './utils/marketSessions';
+import { SYMBOLS, getSessionState } from './utils/marketSessions';
 
 const DIRECTION_LABELS = { UP: 'ขึ้น', DOWN: 'ลง', SIDEWAYS: 'ทรงตัว' };
 const SHORT_HORIZONS = [
@@ -195,6 +194,12 @@ const activeMarket = computed(() => {
 const statusOverrides = computed(() => Object.fromEntries(markets.value.map((m) => [m.symbol, m.market_status])));
 
 const closeForecast = computed(() => activeMarket.value?.close_forecast);
+
+// Segment the "Close" row refers to, e.g. "ช่วงเช้า"
+const activeSegmentLabel = computed(() => {
+  const cf = activeMarket.value?.close_forecast;
+  return cf && 'label' in cf && cf.label !== 'ทั้งวัน' ? (cf as SegmentForecast).label : '';
+});
 const closePrediction = computed(() => horizons.value['Close'] || horizons.value['5m']);
 
 const isTrading = computed(() => {
@@ -218,7 +223,7 @@ const horizonList = computed(() => {
   rows.push({
     label: 'Close',
     minutes: 0,
-    desc: cf?.locked ? '🔒 ราคาปิด (ล็อกแล้ว)' : 'ราคาปิด',
+    desc: `${cf?.locked ? '🔒 ' : ''}ราคาปิด${activeSegmentLabel.value}${cf?.locked ? ' (ล็อกแล้ว)' : ''}`,
     isClose: true,
     price: m.expected_close,
     halfRange: (m.prediction_range.upper - m.prediction_range.lower) / 2,

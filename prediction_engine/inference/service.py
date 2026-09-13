@@ -96,7 +96,7 @@ class PredictionService:
         curr_price: float,
         now: datetime,
     ) -> Dict[str, Any]:
-        """Live close forecast until 30 minutes before the close, frozen from then on."""
+        """Live session-close forecast until the final segment's lock time, frozen from then on."""
         live = {
             "session_date": state["current"].session_date if state else None,
             "value": close_pred["expected_price"],
@@ -109,10 +109,11 @@ class PredictionService:
             "error": None,
             "error_pct": None,
         }
-        if not state or state["status"] not in (market_hours.STATUS_LOCKED, market_hours.STATUS_CLOSED):
+        session = state["current"] if state else None
+        # Only the final segment's lock freezes the session close (morning locks apply to the morning close)
+        if not session or now < session.lock_at:
             return live
 
-        session = state["current"]
         locked = self.locked_close.get(symbol)
         if not locked or locked["session_date"] != session.session_date:
             # First snapshot at or after lock time for this session

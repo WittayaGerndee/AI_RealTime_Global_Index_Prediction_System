@@ -1,42 +1,72 @@
 // Exchange trading-session calendar, evaluated in each exchange's own timezone
 // (so US daylight-saving shifts are handled) and displayed in Thai time.
-// Public holidays are not modelled: a holiday is treated as a normal trading day.
+// Public holidays are not modelled here; the real-data engine detects them from missing bars.
 
 export const THAI_TZ = 'Asia/Bangkok';
 
-/** Minutes before the final close at which the predicted close is locked. */
-export const LOCK_MINUTES_BEFORE_CLOSE = 30;
+export const SYMBOLS = ['NIKKEI225', 'HSI', 'SZSE', 'DJI'];
 
 /** HOLIDAY is only reported by real data (no bars on a scheduled trading day). */
 export type SessionStatus = 'PRE_OPEN' | 'OPEN' | 'LUNCH' | 'LOCKED' | 'CLOSED' | 'HOLIDAY';
 
-interface Segment {
+interface SegmentSpec {
   open: string; // exchange-local "HH:mm"
-  close: string;
+  close: string; // exchange-local "HH:mm"
+  lockTh: string; // Thai "HH:mm" at which this segment's closing forecast is frozen
 }
 
 interface ExchangeSchedule {
   timezone: string;
-  segments: Segment[];
+  segments: SegmentSpec[];
 }
 
 export const EXCHANGE_SCHEDULES: Record<string, ExchangeSchedule> = {
   // TSE extended its close to 15:30 JST in Nov 2024
-  NIKKEI225: { timezone: 'Asia/Tokyo', segments: [{ open: '09:00', close: '11:30' }, { open: '12:30', close: '15:30' }] },
-  HSI: { timezone: 'Asia/Hong_Kong', segments: [{ open: '09:30', close: '12:00' }, { open: '13:00', close: '16:00' }] },
+  NIKKEI225: {
+    timezone: 'Asia/Tokyo',
+    segments: [
+      { open: '09:00', close: '11:30', lockTh: '09:15' },
+      { open: '12:30', close: '15:30', lockTh: '12:45' },
+    ],
+  },
+  HSI: {
+    timezone: 'Asia/Hong_Kong',
+    segments: [
+      { open: '09:30', close: '12:00', lockTh: '10:45' },
+      { open: '13:00', close: '16:00', lockTh: '14:45' },
+    ],
+  },
   // Shenzhen shares China Standard Time with Shanghai
-  SZSE: { timezone: 'Asia/Shanghai', segments: [{ open: '09:30', close: '11:30' }, { open: '13:00', close: '15:00' }] },
-  DJI: { timezone: 'America/New_York', segments: [{ open: '09:30', close: '16:00' }] },
+  SZSE: {
+    timezone: 'Asia/Shanghai',
+    segments: [
+      { open: '09:30', close: '11:30', lockTh: '09:45' },
+      { open: '13:00', close: '15:00', lockTh: '13:40' },
+    ],
+  },
+  DJI: {
+    timezone: 'America/New_York',
+    segments: [{ open: '09:30', close: '16:00', lockTh: '00:45' }],
+  },
 };
+
+export interface TradingSegment {
+  index: number;
+  /** "ช่วงเช้า" / "ช่วงบ่าย" / "ทั้งวัน" */
+  label: string;
+  open: Date;
+  close: Date;
+  lockAt: Date;
+  isFinal: boolean;
+}
 
 export interface TradingSession {
   symbol: string;
   /** Exchange-local trading date, "YYYY-MM-DD" — stable key for the session. */
   dateKey: string;
-  segments: { open: Date; close: Date }[];
+  segments: TradingSegment[];
   open: Date;
   close: Date;
-  lockAt: Date;
 }
 
 export interface SessionState {
@@ -45,7 +75,7 @@ export interface SessionState {
   current: TradingSession;
   /** Next session that has not opened yet. */
   next: TradingSession;
-  /** Next status change: lunch start/end, lock, close or next open. */
+  /** Next status change: lock, segment close, lunch end or next open. */
   nextEvent: { label: string; at: Date };
 }
 
@@ -85,7 +115,7 @@ function tzOffsetMs(date: Date, timeZone: string): number {
   return asUtc - Math.floor(date.getTime() / 1000) * 1000;
 }
 
-/** Converts an exchange-local wall-clock time to an absolute instant. */
+/** Converts a wall-clock time in `timeZone` to an absolute instant. */
 function zonedTime(local: LocalDate, hhmm: string, timeZone: string): Date {
   const [h, min] = hhmm.split(':').map(Number);
   const guess = Date.UTC(local.y, local.m - 1, local.d, h, min);
@@ -105,22 +135,42 @@ function isWeekday(local: LocalDate): boolean {
   return dow !== 0 && dow !== 6;
 }
 
+/** Latest instant at Thai wall-clock `hhmm` that is not after `notAfter`. */
+function thaiTimeAtOrBefore(hhmm: string, notAfter: Date): Date {
+  const p = zonedParts(notAfter, THAI_TZ);
+  let local: LocalDate = { y: p.year, m: p.month, d: p.day };
+  let t = zonedTime(local, hhmm, THAI_TZ);
+  if (t.getTime() > notAfter.getTime()) {
+    local = addDays(local, -1);
+    t = zonedTime(local, hhmm, THAI_TZ);
+  }
+  return t;
+}
+
 function buildSession(symbol: string, local: LocalDate): TradingSession {
   const sched = EXCHANGE_SCHEDULES[symbol];
-  const segments = sched.segments.map((s) => ({
-    open: zonedTime(local, s.open, sched.timezone),
-    close: zonedTime(local, s.close, sched.timezone),
-  }));
-  const open = segments[0].open;
-  const close = segments[segments.length - 1].close;
-  const pad = (n: number) => String(n).padStart(2, '0');
+  const n = sched.segments.length;
+  const segments = sched.segments.map((s, index) => {
+    const open = zonedTime(local, s.open, sched.timezone);
+    const close = zonedTime(local, s.close, sched.timezone);
+    const lockAt = thaiTimeAtOrBefore(s.lockTh, close);
+    return {
+      index,
+      label: n === 1 ? 'ทั้งวัน' : index === 0 ? 'ช่วงเช้า' : 'ช่วงบ่าย',
+      open,
+      close,
+      // A lock time before the segment opens falls back to the segment open
+      lockAt: lockAt.getTime() < open.getTime() ? open : lockAt,
+      isFinal: index === n - 1,
+    };
+  });
+  const pad = (v: number) => String(v).padStart(2, '0');
   return {
     symbol,
     dateKey: `${local.y}-${pad(local.m)}-${pad(local.d)}`,
     segments,
-    open,
-    close,
-    lockAt: new Date(close.getTime() - LOCK_MINUTES_BEFORE_CLOSE * 60_000),
+    open: segments[0].open,
+    close: segments[n - 1].close,
   };
 }
 
@@ -175,22 +225,16 @@ export function getSessionState(symbol: string, now: Date = new Date()): Session
     return { status: 'CLOSED', current, next, nextEvent: { label: 'เปิดตลาด', at: next.open } };
   }
 
-  const inSegment = current.segments.findIndex((s) => t >= s.open.getTime() && t < s.close.getTime());
-  if (inSegment === -1) {
-    const resume = current.segments.find((s) => s.open.getTime() > t)!;
-    return { status: 'LUNCH', current, next, nextEvent: { label: 'เปิดช่วงบ่าย', at: resume.open } };
+  const seg = current.segments.find((s) => t < s.close.getTime())!;
+  if (t < seg.open.getTime()) {
+    return { status: 'LUNCH', current, next, nextEvent: { label: 'เปิดช่วงบ่าย', at: seg.open } };
   }
-
-  if (t >= current.lockAt.getTime()) {
-    return { status: 'LOCKED', current, next, nextEvent: { label: 'ปิดตลาด', at: current.close } };
+  if (t >= seg.lockAt.getTime()) {
+    const label = seg.isFinal ? 'ปิดตลาด' : 'ปิดช่วงเช้า';
+    return { status: 'LOCKED', current, next, nextEvent: { label, at: seg.close } };
   }
-
-  const seg = current.segments[inSegment];
-  const isLast = inSegment === current.segments.length - 1;
-  const nextEvent = isLast
-    ? { label: 'ล็อกราคาคาดการณ์', at: current.lockAt }
-    : { label: 'พักกลางวัน', at: seg.close };
-  return { status: 'OPEN', current, next, nextEvent };
+  const label = seg.isFinal ? 'ล็อกคาดการณ์ราคาปิด' : 'ล็อกคาดการณ์ปิดช่วงเช้า';
+  return { status: 'OPEN', current, next, nextEvent: { label, at: seg.lockAt } };
 }
 
 /** Status of a market before its first session of the day, used for display only. */
@@ -199,32 +243,6 @@ export function displayStatus(state: SessionState, now: Date = new Date()): Sess
     return 'PRE_OPEN';
   }
   return state.status;
-}
-
-/** Trading seconds elapsed in `session` at `now` (lunch breaks excluded). */
-export function tradingSecondsElapsed(session: TradingSession, now: Date): number {
-  const t = now.getTime();
-  let total = 0;
-  for (const s of session.segments) {
-    const end = Math.min(t, s.close.getTime());
-    if (end > s.open.getTime()) total += (end - s.open.getTime()) / 1000;
-  }
-  return Math.floor(total);
-}
-
-export function totalTradingSeconds(session: TradingSession): number {
-  return session.segments.reduce((sum, s) => sum + (s.close.getTime() - s.open.getTime()) / 1000, 0);
-}
-
-/** Maps trading seconds since open back to a wall-clock instant. */
-export function instantAtTradingSecond(session: TradingSession, seconds: number): Date {
-  let remaining = seconds;
-  for (const s of session.segments) {
-    const len = (s.close.getTime() - s.open.getTime()) / 1000;
-    if (remaining <= len) return new Date(s.open.getTime() + remaining * 1000);
-    remaining -= len;
-  }
-  return session.close;
 }
 
 const thaiTimeFmt = new Intl.DateTimeFormat('th-TH', { timeZone: THAI_TZ, hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });

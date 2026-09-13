@@ -17,6 +17,8 @@ export interface MarketSummary {
   last_update?: string;
   expected_close: number;
   close_forecast?: CloseForecast;
+  /** One closing forecast per trading segment (morning / afternoon, or full day). */
+  segment_forecasts?: SegmentForecast[];
   prediction_range: {
     lower: number;
     upper: number;
@@ -33,7 +35,7 @@ export interface MarketSummary {
   convergence_stability: 'HIGH' | 'LOW';
 }
 
-/** Session closing-price forecast; frozen from 30 minutes before the close. */
+/** Closing-price forecast; frozen from its lock time until the close. */
 export interface CloseForecast {
   session_date: string;
   value: number;
@@ -45,6 +47,32 @@ export interface CloseForecast {
   actual_close: number | null;
   error: number | null;
   error_pct: number | null;
+}
+
+export interface SegmentForecast extends CloseForecast {
+  segment_index: number;
+  /** "ช่วงเช้า" / "ช่วงบ่าย" / "ทั้งวัน" */
+  label: string;
+  lock_at: string;
+  close_at: string;
+  /** LIVE: still updating • LOCKED: frozen, awaiting close • CLOSED: actual close known */
+  status: 'LIVE' | 'LOCKED' | 'CLOSED';
+  model: 'random_walk' | 'ridge';
+  training_sessions: number;
+}
+
+export interface SegmentAccuracy {
+  label: string;
+  lock_time_th: string;
+  total: number;
+  model: 'random_walk' | 'ridge';
+  mae: number;
+  mae_pct: number;
+  /** MAE of simply using the price at lock time */
+  baseline_mae: number;
+  direction_accuracy: number;
+  range_coverage: number;
+  within_0_10_pct: number;
 }
 
 export interface Candle {
@@ -93,6 +121,7 @@ export interface HorizonPrediction {
 }
 
 export interface AccuracyReport {
+  segments?: SegmentAccuracy[];
   total_predictions: number;
   mae: number;
   rmse: number;

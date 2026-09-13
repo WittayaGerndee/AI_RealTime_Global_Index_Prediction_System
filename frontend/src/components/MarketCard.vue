@@ -58,52 +58,55 @@
       </div>
     </div>
 
-    <!-- Close Forecast -->
-    <div
-      :class="[
-        'rounded-xl p-3 border space-y-2 mb-3',
-        forecast?.locked ? 'bg-amber-500/5 border-amber-500/30' : 'bg-dark-900/80 border-gray-800/80'
-      ]"
-    >
-      <div class="flex items-center justify-between text-xs">
-        <span class="text-gray-400 whitespace-nowrap">
-          คาดการณ์ราคาปิด
-          <span v-if="forecast?.locked" class="text-amber-400 font-semibold">🔒</span>
-        </span>
-        <span :class="['font-mono font-bold text-sm', forecast?.locked ? 'text-amber-300' : 'text-blue-400']">
-          {{ formatPrice(market.expected_close) }}
-        </span>
-      </div>
-      <div class="flex items-center justify-between text-xs">
-        <span class="text-gray-400 whitespace-nowrap">ช่วง 80%</span>
-        <span class="font-mono text-gray-300">
-          {{ formatPrice(market.prediction_range.lower) }} - {{ formatPrice(market.prediction_range.upper) }}
-        </span>
-      </div>
-
-      <div class="text-[10px]" :class="forecast?.locked ? 'text-amber-400' : 'text-gray-500'">
-        {{ forecast?.locked
-          ? `ล็อกค่าแล้วเมื่อ ${formatThaiTime(new Date(forecast.locked_at!))} (ก่อนปิด 30 นาที)`
-          : 'ค่ายังปรับตามราคาจนถึงเวลาล็อก' }}
-      </div>
-
-      <template v-if="forecast?.actual_close != null">
-        <div class="flex items-center justify-between text-xs pt-2 border-t border-gray-800">
-          <span class="text-gray-400">ราคาปิดจริง</span>
-          <span class="font-mono font-bold text-white">{{ formatPrice(forecast.actual_close) }}</span>
-        </div>
-        <div class="flex items-center justify-between text-xs">
-          <span class="text-gray-400">คลาดเคลื่อน</span>
-          <span :class="['font-mono font-semibold', Math.abs(forecast.error_pct!) <= 0.2 ? 'text-emerald-400' : 'text-red-400']">
-            {{ forecast.error! >= 0 ? '+' : '' }}{{ formatPrice(forecast.error!) }}
-            ({{ forecast.error_pct! >= 0 ? '+' : '' }}{{ forecast.error_pct!.toFixed(2) }}%)
+    <!-- Closing forecast per trading segment -->
+    <div class="space-y-2 mb-3">
+      <div
+        v-for="f in forecasts"
+        :key="f.segment_index"
+        :class="[
+          'rounded-xl p-3 border space-y-1.5',
+          f.status === 'LIVE' ? 'bg-dark-900/80 border-gray-800/80' : 'bg-amber-500/5 border-amber-500/30'
+        ]"
+      >
+        <div class="flex items-center justify-between text-xs gap-2">
+          <span class="text-gray-300 font-semibold whitespace-nowrap">
+            คาดการณ์{{ f.label === 'ทั้งวัน' ? 'ราคาปิด' : `ปิด${f.label}` }}
+            <span v-if="f.status !== 'LIVE'" class="text-amber-400">🔒</span>
+          </span>
+          <span :class="['font-mono font-bold text-sm', f.status === 'LIVE' ? 'text-blue-400' : 'text-amber-300']">
+            {{ formatPrice(f.value) }}
           </span>
         </div>
-      </template>
+        <div class="flex items-center justify-between text-[11px] gap-2">
+          <span class="text-gray-500 whitespace-nowrap">ช่วง 80%</span>
+          <span class="font-mono text-gray-300">{{ formatPrice(f.lower) }} - {{ formatPrice(f.upper) }}</span>
+        </div>
+        <div class="text-[10px]" :class="f.status === 'LIVE' ? 'text-gray-500' : 'text-amber-400'">
+          {{ f.status === 'LIVE'
+            ? `ล็อกเวลา ${formatThaiTime(new Date(f.lock_at))} น. • ปิด ${formatThaiTime(new Date(f.close_at))} น.`
+            : `ล็อกแล้ว ${formatThaiTime(new Date(f.lock_at))} น. • ปิด ${formatThaiTime(new Date(f.close_at))} น.` }}
+        </div>
+        <template v-if="f.actual_close != null">
+          <div class="flex items-center justify-between text-xs pt-1.5 border-t border-gray-800">
+            <span class="text-gray-400">ราคาปิดจริง</span>
+            <span class="font-mono font-bold text-white">{{ formatPrice(f.actual_close) }}</span>
+          </div>
+          <div class="flex items-center justify-between text-xs">
+            <span class="text-gray-400">คลาดเคลื่อน</span>
+            <span :class="['font-mono font-semibold', Math.abs(f.error_pct!) <= 0.1 ? 'text-emerald-400' : 'text-red-400']">
+              {{ f.error! >= 0 ? '+' : '' }}{{ formatPrice(f.error!) }}
+              ({{ f.error_pct! >= 0 ? '+' : '' }}{{ f.error_pct!.toFixed(2) }}%)
+            </span>
+          </div>
+        </template>
+      </div>
+      <div v-if="!forecasts.length" class="rounded-xl p-3 border border-gray-800 text-xs text-gray-500">
+        รอข้อมูลหลังเปิดตลาด
+      </div>
     </div>
 
     <!-- Card Bottom: Day Extremes & Confidence -->
-    <div class="pt-3 border-t border-gray-800/60 flex items-center justify-between text-[11px] text-gray-400">
+    <div class="pt-3 border-t border-gray-800/60 flex flex-wrap items-center justify-between gap-2 text-[11px] text-gray-400">
       <div class="flex items-center gap-3 font-mono">
         <span>O: {{ formatPrice(market.day_open) }}</span>
         <span>H: {{ formatPrice(market.day_high) }}</span>
@@ -140,7 +143,7 @@ defineEmits(['select']);
 
 const state = computed(() => getSessionState(props.market.symbol, props.now));
 const status = computed(() => (props.market.market_status === 'HOLIDAY' ? 'HOLIDAY' : displayStatus(state.value, props.now)));
-const forecast = computed(() => props.market.close_forecast);
+const forecasts = computed(() => props.market.segment_forecasts ?? []);
 
 // Hours of the upcoming session once the current one has closed
 const sessionHours = computed(() => {

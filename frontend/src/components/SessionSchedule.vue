@@ -3,7 +3,7 @@
     <div class="flex flex-wrap items-center justify-between gap-2 mb-3">
       <h2 class="text-sm font-bold text-white">ตารางเวลาตลาด (เวลาประเทศไทย)</h2>
       <span class="text-[11px] text-gray-500">
-        ราคาคาดการณ์ราคาปิดจะล็อกก่อนปิดตลาด {{ LOCK_MINUTES_BEFORE_CLOSE }} นาที • ยังไม่รวมวันหยุดนักขัตฤกษ์ของแต่ละตลาด
+        ราคาคาดการณ์จะหยุดนิ่ง ณ เวลาล็อก • วันหยุดตลาดตรวจจากข้อมูลจริง
       </span>
     </div>
 
@@ -14,8 +14,9 @@
             <th class="py-2 pr-3 font-medium">ตลาด</th>
             <th class="py-2 pr-3 font-medium">วันทำการ</th>
             <th class="py-2 pr-3 font-medium">ช่วงเช้า</th>
+            <th class="py-2 pr-3 font-medium text-amber-400">ล็อก (เช้า)</th>
             <th class="py-2 pr-3 font-medium">ช่วงบ่าย</th>
-            <th class="py-2 pr-3 font-medium text-amber-400">ล็อกคาดการณ์</th>
+            <th class="py-2 pr-3 font-medium text-amber-400">ล็อก (บ่าย)</th>
             <th class="py-2 pr-3 font-medium">สถานะ</th>
           </tr>
         </thead>
@@ -29,8 +30,9 @@
             <td class="py-2 pr-3 font-mono font-bold text-gray-200">{{ row.symbol }}</td>
             <td class="py-2 pr-3 text-gray-400">{{ row.dateLabel }}</td>
             <td class="py-2 pr-3 font-mono text-gray-200">{{ row.morning }}</td>
+            <td class="py-2 pr-3 font-mono font-semibold text-amber-300">{{ row.morningLock }}</td>
             <td class="py-2 pr-3 font-mono text-gray-200">{{ row.afternoon }}</td>
-            <td class="py-2 pr-3 font-mono font-semibold text-amber-300">{{ row.lock }}</td>
+            <td class="py-2 pr-3 font-mono font-semibold text-amber-300">{{ row.afternoonLock }}</td>
             <td class="py-2 pr-3">
               <span :class="['font-semibold', row.statusClass]">{{ row.statusLabel }}</span>
             </td>
@@ -49,7 +51,6 @@ import {
   formatThaiTime,
   formatThaiDate,
   STATUS_LABELS,
-  LOCK_MINUTES_BEFORE_CLOSE,
 } from '../utils/marketSessions';
 
 const props = defineProps<{
@@ -76,15 +77,18 @@ const rows = computed(() =>
     const state = getSessionState(symbol, props.now);
     // Show today's session while it runs, otherwise the upcoming one
     const s = state.status === 'CLOSED' ? state.next : state.current;
-    const seg = s.segments.map((x) => `${formatThaiTime(x.open)}–${formatThaiTime(x.close)}`);
+    const hours = (i: number) => `${formatThaiTime(s.segments[i].open)}–${formatThaiTime(s.segments[i].close)}`;
+    const lock = (i: number) => formatThaiTime(s.segments[i].lockAt);
     const status = props.statusOverrides?.[symbol] === 'HOLIDAY' ? 'HOLIDAY' : displayStatus(state, props.now);
+    const split = s.segments.length > 1;
     return {
       symbol,
       dateLabel: formatThaiDate(s.open),
       // Single-session markets (NYSE) have no lunch break
-      morning: seg.length > 1 ? seg[0] : `${formatThaiTime(s.open)}–${formatThaiTime(s.close)}`,
-      afternoon: seg.length > 1 ? seg[1] : 'ไม่มีพักกลางวัน',
-      lock: formatThaiTime(s.lockAt),
+      morning: hours(0),
+      morningLock: lock(0),
+      afternoon: split ? hours(1) : 'ไม่มีพักกลางวัน',
+      afternoonLock: split ? lock(1) : '—',
       statusLabel: STATUS_LABELS[status],
       statusClass: STATUS_CLASS[status],
     };

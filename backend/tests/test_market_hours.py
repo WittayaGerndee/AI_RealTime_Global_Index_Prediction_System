@@ -47,16 +47,23 @@ class TestMarketHours(unittest.TestCase):
 
     def test_dow_follows_us_daylight_saving(self):
         summer = market_hours.get_session_state("DJI", th(2026, 9, 14, 21, 0))["current"]
-        self.assertEqual((th_hhmm(summer.open), th_hhmm(summer.close), th_hhmm(summer.lock_at)), ("20:30", "03:00", "02:30"))
+        self.assertEqual((th_hhmm(summer.open), th_hhmm(summer.close), th_hhmm(summer.lock_at)), ("20:30", "03:00", "00:45"))
         winter = market_hours.get_session_state("DJI", th(2026, 12, 14, 22, 0))["current"]
-        self.assertEqual((th_hhmm(winter.open), th_hhmm(winter.close)), ("21:30", "04:00"))
+        self.assertEqual((th_hhmm(winter.open), th_hhmm(winter.close), th_hhmm(winter.lock_at)), ("21:30", "04:00", "00:45"))
+
+    def test_segment_lock_times_in_thai_time(self):
+        expected = {"NIKKEI225": ["09:15", "12:45"], "HSI": ["10:45", "14:45"], "SZSE": ["09:45", "13:40"]}
+        for sym, locks in expected.items():
+            session = market_hours.get_session_state(sym, th(2026, 9, 14, 10, 0))["current"]
+            self.assertEqual([th_hhmm(t) for t in session.segment_locks], locks, sym)
 
     def test_status_transitions(self):
         cases = [
             (th(2026, 9, 14, 7, 30), "OPEN"),
+            (th(2026, 9, 14, 9, 20), "LOCKED"),  # morning close forecast locked at 09:15
             (th(2026, 9, 14, 10, 0), "LUNCH"),
-            (th(2026, 9, 14, 12, 59), "OPEN"),
-            (th(2026, 9, 14, 13, 0), "LOCKED"),
+            (th(2026, 9, 14, 12, 40), "OPEN"),
+            (th(2026, 9, 14, 12, 45), "LOCKED"),
             (th(2026, 9, 14, 13, 30), "CLOSED"),
             (th(2026, 9, 13, 10, 0), "CLOSED"),  # Sunday
         ]
@@ -74,12 +81,12 @@ class TestCloseForecastLock(unittest.TestCase):
         svc = PredictionService()
         sym = "NIKKEI225"
 
-        before = svc._close_forecast(sym, market_hours.get_session_state(sym, th(2026, 9, 14, 12, 50)),
-                                     {"expected_price": 38100.0, "lower_bound": 38000.0, "upper_bound": 38200.0}, 38050.0, th(2026, 9, 14, 12, 50))
+        before = svc._close_forecast(sym, market_hours.get_session_state(sym, th(2026, 9, 14, 12, 40)),
+                                     {"expected_price": 38100.0, "lower_bound": 38000.0, "upper_bound": 38200.0}, 38050.0, th(2026, 9, 14, 12, 40))
         self.assertFalse(before["locked"])
 
-        at_lock = svc._close_forecast(sym, market_hours.get_session_state(sym, th(2026, 9, 14, 13, 1)),
-                                      {"expected_price": 38120.0, "lower_bound": 38020.0, "upper_bound": 38220.0}, 38060.0, th(2026, 9, 14, 13, 1))
+        at_lock = svc._close_forecast(sym, market_hours.get_session_state(sym, th(2026, 9, 14, 12, 46)),
+                                      {"expected_price": 38120.0, "lower_bound": 38020.0, "upper_bound": 38220.0}, 38060.0, th(2026, 9, 14, 12, 46))
         later = svc._close_forecast(sym, market_hours.get_session_state(sym, th(2026, 9, 14, 13, 20)),
                                     {"expected_price": 37900.0, "lower_bound": 37800.0, "upper_bound": 38000.0}, 37950.0, th(2026, 9, 14, 13, 20))
         self.assertTrue(at_lock["locked"])

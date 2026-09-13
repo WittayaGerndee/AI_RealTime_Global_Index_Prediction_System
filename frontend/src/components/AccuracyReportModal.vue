@@ -1,6 +1,6 @@
 <template>
   <div class="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
-    <div class="bg-dark-800 border border-gray-700 rounded-2xl max-w-2xl w-full p-6 shadow-2xl overflow-hidden relative">
+    <div class="bg-dark-800 border border-gray-700 rounded-2xl max-w-3xl w-full p-6 shadow-2xl overflow-y-auto max-h-[90vh] relative">
       <!-- Modal Header -->
       <div class="flex items-center justify-between border-b border-gray-800 pb-4 mb-5">
         <div>
@@ -35,6 +35,38 @@
           <div class="text-[11px] text-gray-400 mb-1">MAE (Error)</div>
           <div class="text-xl font-bold font-mono text-gray-200">{{ report.mae }}</div>
         </div>
+      </div>
+
+      <!-- Per-segment walk-forward results -->
+      <div v-if="report.segments?.length" class="bg-dark-900 rounded-xl border border-gray-800 p-4 mb-5 overflow-x-auto">
+        <h4 class="text-xs font-bold text-gray-300 uppercase tracking-wider mb-1">คาดการณ์ราคาปิด ณ เวลาล็อก (ทดสอบย้อนหลังแบบ walk-forward)</h4>
+        <p class="text-[11px] text-gray-500 mb-3">แต่ละวันถูกคาดการณ์จากข้อมูลวันก่อนหน้าเท่านั้น • "ใช้ราคาล่าสุด" คือความคลาดเคลื่อนหากเดาว่าราคาปิด = ราคา ณ เวลาล็อก</p>
+        <table class="w-full text-xs min-w-[520px]">
+          <thead>
+            <tr class="text-gray-500 text-left border-b border-gray-800">
+              <th class="py-1.5 pr-2 font-medium">ช่วง</th>
+              <th class="py-1.5 pr-2 font-medium">ล็อก</th>
+              <th class="py-1.5 pr-2 font-medium">วัน</th>
+              <th class="py-1.5 pr-2 font-medium">โมเดล</th>
+              <th class="py-1.5 pr-2 font-medium">คลาดเฉลี่ย</th>
+              <th class="py-1.5 pr-2 font-medium">ใช้ราคาล่าสุด</th>
+              <th class="py-1.5 pr-2 font-medium">≤0.10%</th>
+              <th class="py-1.5 pr-2 font-medium">อยู่ในช่วง 80%</th>
+            </tr>
+          </thead>
+          <tbody class="font-mono">
+            <tr v-for="seg in report.segments" :key="seg.label" class="border-b border-gray-800/60">
+              <td class="py-1.5 pr-2 font-sans text-gray-200">{{ seg.label }}</td>
+              <td class="py-1.5 pr-2 text-amber-300">{{ seg.lock_time_th }}</td>
+              <td class="py-1.5 pr-2 text-gray-300">{{ seg.total }}</td>
+              <td class="py-1.5 pr-2 font-sans text-gray-300">{{ seg.model === 'ridge' ? 'Ridge' : 'Random walk' }}</td>
+              <td class="py-1.5 pr-2 text-gray-100">{{ seg.mae }} ({{ seg.mae_pct.toFixed(2) }}%)</td>
+              <td class="py-1.5 pr-2 text-gray-400">{{ seg.baseline_mae }}</td>
+              <td class="py-1.5 pr-2 text-emerald-400">{{ seg.within_0_10_pct }}%</td>
+              <td class="py-1.5 pr-2 text-blue-400">{{ seg.range_coverage }}%</td>
+            </tr>
+          </tbody>
+        </table>
       </div>
 
       <!-- Multi-Tolerance Table (Section 21) -->

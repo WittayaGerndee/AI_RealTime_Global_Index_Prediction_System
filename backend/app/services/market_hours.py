@@ -10,16 +10,14 @@ from zoneinfo import ZoneInfo
 
 THAI_TZ = ZoneInfo("Asia/Bangkok")
 
-# Minutes before the final close at which the predicted close is locked
-LOCK_MINUTES_BEFORE_CLOSE = 30
-
-EXCHANGE_SCHEDULES: Dict[str, Tuple[str, List[Tuple[str, str]]]] = {
+# (exchange-local open, exchange-local close, Thai time at which that segment's closing forecast is locked)
+EXCHANGE_SCHEDULES: Dict[str, Tuple[str, List[Tuple[str, str, str]]]] = {
     # TSE extended its close to 15:30 JST in Nov 2024
-    "NIKKEI225": ("Asia/Tokyo", [("09:00", "11:30"), ("12:30", "15:30")]),
-    "HSI": ("Asia/Hong_Kong", [("09:30", "12:00"), ("13:00", "16:00")]),
+    "NIKKEI225": ("Asia/Tokyo", [("09:00", "11:30", "09:15"), ("12:30", "15:30", "12:45")]),
+    "HSI": ("Asia/Hong_Kong", [("09:30", "12:00", "10:45"), ("13:00", "16:00", "14:45")]),
     # Shenzhen shares China Standard Time with Shanghai
-    "SZSE": ("Asia/Shanghai", [("09:30", "11:30"), ("13:00", "15:00")]),
-    "DJI": ("America/New_York", [("09:30", "16:00")]),
+    "SZSE": ("Asia/Shanghai", [("09:30", "11:30", "09:45"), ("13:00", "15:00", "13:40")]),
+    "DJI": ("America/New_York", [("09:30", "16:00", "00:45")]),
 }
 
 STATUS_OPEN = "OPEN"
@@ -33,6 +31,7 @@ class TradingSession:
     symbol: str
     session_date: str  # exchange-local "YYYY-MM-DD"
     segments: List[Tuple[datetime, datetime]]
+    segment_locks: List[datetime]
 
     @property
     def open(self) -> datetime:
@@ -44,7 +43,8 @@ class TradingSession:
 
     @property
     def lock_at(self) -> datetime:
-        return self.close - timedelta(minutes=LOCK_MINUTES_BEFORE_CLOSE)
+        """Lock time of the final segment's closing forecast."""
+        return self.segment_locks[-1]
 
     def remaining_trading_minutes(self, now: datetime) -> float:
         total = 0.0
@@ -64,6 +64,7 @@ class TradingSession:
             "open": self.open.astimezone(THAI_TZ).isoformat(),
             "close": self.close.astimezone(THAI_TZ).isoformat(),
             "lock_at": self.lock_at.astimezone(THAI_TZ).isoformat(),
+            "segment_locks": [t.astimezone(THAI_TZ).isoformat() for t in self.segment_locks],
         }
 
 
@@ -79,11 +80,19 @@ def _build_session(symbol: str, local_day: date) -> TradingSession:
         h, m = map(int, hhmm.split(":"))
         return datetime.combine(local_day, time(h, m), tzinfo=tz).astimezone(timezone.utc)
 
-    return TradingSession(
-        symbol=symbol,
-        session_date=local_day.isoformat(),
-        segments=[(at(o), at(c)) for o, c in segments],
-    )
+    bounds = [(at(o), at(c)) for o, c, _ in segments]
+    locks = [max(seg_open, _thai_time_at_or_before(lock_th, seg_close)) for (seg_open, seg_close), (_, _, lock_th) in zip(bounds, segments)]
+    return TradingSession(symbol=symbol, session_date=local_day.isoformat(), segments=bounds, segment_locks=locks)
+
+
+def _thai_time_at_or_before(hhmm: str, not_after: datetime) -> datetime:
+    """Latest instant at Thai wall-clock `hhmm` that is not after `not_after`."""
+    h, m = map(int, hhmm.split(":"))
+    local = not_after.astimezone(THAI_TZ)
+    candidate = local.replace(hour=h, minute=m, second=0, microsecond=0)
+    if candidate > local:
+        candidate -= timedelta(days=1)
+    return candidate.astimezone(timezone.utc)
 
 
 def _local_today(symbol: str, now: datetime) -> date:
@@ -118,11 +127,12 @@ def get_session_state(symbol: str, now: Optional[datetime] = None) -> Dict[str, 
     current = session_on_or_before(symbol, now)
     nxt = next_session_after(symbol, now)
 
-    if now >= current.close:
+    active = next((i for i, (_, c) in enumerate(current.segments) if now < c), None)
+    if active is None:
         status = STATUS_CLOSED
-    elif not any(o <= now < c for o, c in current.segments):
+    elif now < current.segments[active][0]:
         status = STATUS_LUNCH
-    elif now >= current.lock_at:
+    elif now >= current.segment_locks[active]:
         status = STATUS_LOCKED
     else:
         status = STATUS_OPEN
