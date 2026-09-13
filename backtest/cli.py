@@ -9,7 +9,7 @@ async def run_cli_backtest():
     provider = MockReplayProvider()
     await provider.connect()
     
-    symbols = ["NIKKEI225", "DJI", "HSI", "SSE"]
+    symbols = ["NIKKEI225", "DJI", "HSI", "SZSE"]
     results = {}
     
     print("Executing walk-forward backtesting across all markets...")

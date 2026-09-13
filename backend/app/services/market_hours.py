@@ -17,7 +17,8 @@ EXCHANGE_SCHEDULES: Dict[str, Tuple[str, List[Tuple[str, str]]]] = {
     # TSE extended its close to 15:30 JST in Nov 2024
     "NIKKEI225": ("Asia/Tokyo", [("09:00", "11:30"), ("12:30", "15:30")]),
     "HSI": ("Asia/Hong_Kong", [("09:30", "12:00"), ("13:00", "16:00")]),
-    "SSE": ("Asia/Shanghai", [("09:30", "11:30"), ("13:00", "15:00")]),
+    # Shenzhen shares China Standard Time with Shanghai
+    "SZSE": ("Asia/Shanghai", [("09:30", "11:30"), ("13:00", "15:00")]),
     "DJI": ("America/New_York", [("09:30", "16:00")]),
 }
 

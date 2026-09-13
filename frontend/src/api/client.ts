@@ -1,15 +1,29 @@
 import { MarketSummary, Candle, HorizonPrediction, AccuracyReport } from '../types/market';
 import { edgeEngine } from './edgeSimulation';
+import { realEngine } from './realMarketData';
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api';
 const WS_BASE = import.meta.env.VITE_WS_URL || 'ws://localhost:8000/ws';
-const ALLOW_FALLBACK = import.meta.env.VITE_STANDALONE_DEMO_ENABLED !== 'false';
+
+/** backend: FastAPI stack • real: Yahoo Finance via /market-data • demo: offline simulation */
+export type DataSource = 'backend' | 'real' | 'demo';
+
+type LocalEngine = typeof realEngine | typeof edgeEngine;
 
 class MarketApiClient {
   public isLiveBackend = false;
   private wsMarket: WebSocket | null = null;
   private wsPred: WebSocket | null = null;
   private listeners: Record<string, Function[]> = {};
+
+  public get dataSource(): DataSource {
+    if (this.isLiveBackend) return 'backend';
+    return realEngine.ready ? 'real' : 'demo';
+  }
+
+  private get engine(): LocalEngine {
+    return realEngine.ready ? realEngine : edgeEngine;
+  }
 
   public async checkBackendHealth(): Promise<boolean> {
     try {
@@ -25,16 +39,21 @@ class MarketApiClient {
     return false;
   }
 
+  /** Refreshes real market data (throttled); falls back to the simulation when unavailable. */
+  public async refreshLocalData(): Promise<void> {
+    if (!this.isLiveBackend) await realEngine.refresh();
+  }
+
   public async getMarkets(): Promise<MarketSummary[]> {
     if (this.isLiveBackend) {
       try {
         const res = await fetch(`${API_BASE}/markets`);
         if (res.ok) return await res.json();
       } catch (e) {
-        console.warn('Backend unavailable, falling back to edge engine', e);
+        console.warn('Backend unavailable, falling back to local data', e);
       }
     }
-    return edgeEngine.getMarkets();
+    return this.engine.getMarkets();
   }
 
   public async getCandles(symbol: string, timeframe = '5m'): Promise<Candle[]> {
@@ -44,20 +63,7 @@ class MarketApiClient {
         if (res.ok) return await res.json();
       } catch {}
     }
-    return edgeEngine.getCandles(symbol);
-  }
-
-  public async getPrediction(symbol: string): Promise<HorizonPrediction> {
-    if (this.isLiveBackend) {
-      try {
-        const res = await fetch(`${API_BASE}/predictions/${symbol}`);
-        if (res.ok) {
-          const data = await res.json();
-          return data.horizons['5m'];
-        }
-      } catch {}
-    }
-    return edgeEngine.getPrediction(symbol, 5);
+    return this.engine.getCandles(symbol);
   }
 
   /** Forecasts keyed by horizon label ("1m" … "60m", "Close"). */
@@ -68,9 +74,10 @@ class MarketApiClient {
         if (res.ok) return (await res.json()).horizons;
       } catch {}
     }
+    const engine = this.engine;
     const out: Record<string, HorizonPrediction> = {};
-    for (const h of [1, 5, 15, 30, 60]) out[`${h}m`] = edgeEngine.getPrediction(symbol, h);
-    out['Close'] = edgeEngine.getClosePrediction(symbol);
+    for (const h of [1, 5, 15, 30, 60]) out[`${h}m`] = engine.getPrediction(symbol, h);
+    out['Close'] = engine.getClosePrediction(symbol);
     return out;
   }
 
@@ -81,7 +88,7 @@ class MarketApiClient {
         if (res.ok) return await res.json();
       } catch {}
     }
-    return edgeEngine.getAccuracy(symbol);
+    return this.engine.getAccuracy(symbol);
   }
 
   public async getTimeline(symbol: string) {
@@ -91,7 +98,7 @@ class MarketApiClient {
         if (res.ok) return await res.json();
       } catch {}
     }
-    return edgeEngine.getTimeline(symbol);
+    return this.engine.getTimeline(symbol);
   }
 
   private connectWebSockets() {

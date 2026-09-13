@@ -99,5 +99,5 @@ docker compose up -d
 ## 5. Standalone Edge Mode (Fallback อัจฉริยะ)
 
 หาก Docker Backend บนเครื่องของคุณยังไม่ได้เปิด หรืออยู่ในระหว่างซ่อมบำรุง ระบบ Frontend บน Cloudflare Pages จะสลับเข้าสู่ **Standalone Edge Quant Engine** โดยอัตโนมัติ:
-- ดำเนินการจำลอง Microstructure Ticks และ Candlesticks ของดัชนีทั้ง 4 ตลาด (Nikkei 225, Dow Jones, Hang Seng, SSE)
+- ดำเนินการจำลอง Microstructure Ticks และ Candlesticks ของดัชนีทั้ง 4 ตลาด (Nikkei 225, Dow Jones, Hang Seng, SZSE)
 - คำนวณ EMA, Bollinger Bands, Prediction Ranges (50%, 80%, 95%), Stabilization Zones, และรายงาน Accuracy ย้อนหลังได้ทันที 100%

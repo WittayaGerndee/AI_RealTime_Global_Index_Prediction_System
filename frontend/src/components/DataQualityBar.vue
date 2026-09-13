@@ -8,8 +8,11 @@
         </div>
         <div class="flex items-center space-x-2">
           <span class="text-gray-500">แหล่งข้อมูล:</span>
-          <span v-if="isLive" class="inline-flex items-center gap-1 text-emerald-400 font-medium">
+          <span v-if="source === 'backend'" class="inline-flex items-center gap-1 text-emerald-400 font-medium">
             <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span> Backend (Live)
+          </span>
+          <span v-else-if="source === 'real'" class="inline-flex items-center gap-1 text-emerald-400 font-medium">
+            <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span> ราคาจริง (Yahoo Finance, อัปเดตทุก 30 วินาที)
           </span>
           <span v-else class="inline-flex items-center gap-1 text-amber-400 font-medium">
             <span class="w-1.5 h-1.5 rounded-full bg-amber-400"></span> ข้อมูลจำลอง (Demo)
@@ -27,9 +30,10 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import { getSessionState, THAI_TZ } from '../utils/marketSessions';
+import type { DataSource } from '../api/client';
 
 const props = defineProps<{
-  isLive: boolean;
+  source: DataSource;
   symbols: string[];
   now: Date;
 }>();

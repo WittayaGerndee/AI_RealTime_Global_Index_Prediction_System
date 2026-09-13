@@ -9,21 +9,21 @@ class MockReplayProvider(MarketDataProvider):
     """
     High-fidelity deterministic market data replay provider for backtesting,
     automated CI testing, and local development.
-    Models realistic microstructure for Nikkei 225, Dow Jones, Hang Seng, and SSE.
+    Models realistic microstructure for Nikkei 225, Dow Jones, Hang Seng, and SZSE Component.
     """
 
     DEFAULT_BASE_PRICES = {
         "NIKKEI225": 38450.0,
         "DJI": 40850.0,
         "HSI": 17820.0,
-        "SSE": 2860.0,
+        "SZSE": 13600.0,
     }
 
     VOLATILITIES = {
         "NIKKEI225": 0.0008, # Per-tick volatility
         "DJI": 0.0006,
         "HSI": 0.0009,
-        "SSE": 0.0007,
+        "SZSE": 0.0007,
     }
 
     def __init__(self, name: str = "mock_replay", speed: float = 1.0):

@@ -39,6 +39,10 @@
       </div>
     </div>
 
+    <div v-if="market.last_update" class="text-[10px] text-gray-500 -mt-2 mb-3">
+      ข้อมูลล่าสุด {{ formatThaiDate(new Date(market.last_update)) }} {{ formatThaiTime(new Date(market.last_update)) }} น.
+    </div>
+
     <!-- Session hours in Thai time -->
     <div class="text-[11px] text-gray-400 mb-3 space-y-1">
       <div class="flex items-center justify-between gap-2">
@@ -135,7 +139,7 @@ const props = defineProps<{
 defineEmits(['select']);
 
 const state = computed(() => getSessionState(props.market.symbol, props.now));
-const status = computed(() => displayStatus(state.value, props.now));
+const status = computed(() => (props.market.market_status === 'HOLIDAY' ? 'HOLIDAY' : displayStatus(state.value, props.now)));
 const forecast = computed(() => props.market.close_forecast);
 
 // Hours of the upcoming session once the current one has closed
@@ -150,6 +154,7 @@ const statusClass = computed(() => ({
   LUNCH: 'bg-sky-500/15 text-sky-300 border-sky-500/30',
   PRE_OPEN: 'bg-indigo-500/15 text-indigo-300 border-indigo-500/30',
   CLOSED: 'bg-gray-500/15 text-gray-300 border-gray-500/30',
+  HOLIDAY: 'bg-rose-500/15 text-rose-300 border-rose-500/30',
 }[status.value]));
 
 const statusDot = computed(() => ({
@@ -158,6 +163,7 @@ const statusDot = computed(() => ({
   LUNCH: 'bg-sky-300',
   PRE_OPEN: 'bg-indigo-300',
   CLOSED: 'bg-gray-400',
+  HOLIDAY: 'bg-rose-300',
 }[status.value]));
 
 function formatPrice(val: number): string {

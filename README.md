@@ -6,7 +6,7 @@
 - **Nikkei 225 (NIKKEI225)** - ตลาดญี่ปุ่น (TSE)
 - **Dow Jones Industrial Average (DJI)** - ตลาดสหรัฐฯ (NYSE)
 - **Hang Seng Index (HSI)** - ตลาดฮ่องกง (HKEX)
-- **Shanghai Composite (SSE)** - ตลาดจีน (SSE)
+- **SZSE Component Index (SZSE)** - ตลาดจีน (Shenzhen Stock Exchange)
 
 ออกแบบและปรับแต่งมาเป็นพิเศษสำหรับการโฮสต์ผ่าน **Cloudflare (Cloudflare Pages + Cloudflare Tunnel) + GitHub (Actions CI/CD)**
 

@@ -39,7 +39,7 @@ class TestMarketHours(unittest.TestCase):
         expected = {
             "NIKKEI225": [("07:00", "09:30"), ("10:30", "13:30")],
             "HSI": [("08:30", "11:00"), ("12:00", "15:00")],
-            "SSE": [("08:30", "10:30"), ("12:00", "14:00")],
+            "SZSE": [("08:30", "10:30"), ("12:00", "14:00")],
         }
         for sym, segs in expected.items():
             session = market_hours.get_session_state(sym, monday)["current"]

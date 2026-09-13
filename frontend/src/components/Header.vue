@@ -23,11 +23,11 @@
 
         <!-- Connection Status -->
         <div
-          v-if="isLive"
+          v-if="source !== 'demo'"
           class="flex items-center space-x-2 px-3 py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-xs text-emerald-400"
         >
           <span class="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
-          <span class="font-medium">Live Stream</span>
+          <span class="font-medium">{{ source === 'real' ? 'ราคาจริง' : 'Live Stream' }}</span>
         </div>
         <div
           v-else
@@ -50,6 +50,8 @@
 </template>
 
 <script setup lang="ts">
-defineProps<{ isLive: boolean }>();
+import type { DataSource } from '../api/client';
+
+defineProps<{ source: DataSource }>();
 defineEmits(['open-accuracy']);
 </script>

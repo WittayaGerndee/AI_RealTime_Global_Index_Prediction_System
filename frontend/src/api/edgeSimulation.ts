@@ -8,6 +8,7 @@ import {
   totalTradingSeconds,
   instantAtTradingSecond,
 } from '../utils/marketSessions';
+import { forecastClose, calculateAccuracy, round2, CloseForecastResult } from '../utils/closeForecast';
 
 // Offline demo engine used when the backend is unreachable.
 // Prices are a deterministic, seeded path per trading session: they only move while
@@ -20,11 +21,11 @@ const MODEL_VERSION = 'v1.1.0-SessionClose';
 const METAS: Record<string, { name: string; market: string; currency: string; base: number; dailyVol: number; tickSize: number; phase: number }> = {
   NIKKEI225: { name: 'Nikkei 225', market: 'TSE', currency: 'JPY', base: 38450, dailyVol: 0.011, tickSize: 5, phase: 0.3 },
   HSI: { name: 'Hang Seng Index', market: 'HKEX', currency: 'HKD', base: 17820, dailyVol: 0.013, tickSize: 1, phase: 1.7 },
-  SSE: { name: 'Shanghai Composite', market: 'SSE', currency: 'CNY', base: 2860, dailyVol: 0.009, tickSize: 0.01, phase: 2.9 },
+  SZSE: { name: 'SZSE Component', market: 'SZSE', currency: 'CNY', base: 13600, dailyVol: 0.009, tickSize: 0.01, phase: 2.9 },
   DJI: { name: 'Dow Jones Industrial', market: 'NYSE', currency: 'USD', base: 40850, dailyVol: 0.008, tickSize: 1, phase: 4.1 },
 };
 
-export const SYMBOLS = ['NIKKEI225', 'HSI', 'SSE', 'DJI'];
+export const SYMBOLS = ['NIKKEI225', 'HSI', 'SZSE', 'DJI'];
 
 interface SessionPath {
   session: TradingSession;
@@ -57,8 +58,6 @@ function gaussian(rand: () => number): number {
   const u = Math.max(1e-12, rand());
   return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * rand());
 }
-
-const round2 = (v: number) => Math.round(v * 100) / 100;
 
 /** Deterministic closing level for a session date. */
 function closeAnchor(symbol: string, dateKey: string): number {
@@ -119,61 +118,15 @@ export class EdgeSimulationEngine {
     return this.getPath(sessionOnOrBefore(symbol, now));
   }
 
-  /**
-   * Forecast of the session's closing price using only prices up to `step`.
-   * Combines recent trend (damped) with reversion to the session VWAP, scaled by
-   * the trading time remaining.
-   */
-  private forecastCloseAt(path: SessionPath, step: number) {
-    const meta = METAS[path.session.symbol];
-    const n = path.prices.length - 1;
-    const p = path.prices[step];
-    const remainingFrac = Math.max(0, (n - step) / n);
-
-    // Trend: least-squares slope of log price over the last 30 minutes
-    const window = Math.min(step, Math.round(1800 / STEP_SEC));
-    let slope = 0;
-    if (window >= 12) {
-      let sx = 0, sy = 0, sxx = 0, sxy = 0;
-      for (let i = 0; i <= window; i++) {
-        const y = Math.log(path.prices[step - window + i]);
-        sx += i; sy += y; sxx += i * i; sxy += i * y;
-      }
-      const cnt = window + 1;
-      slope = (cnt * sxy - sx * sy) / Math.max(1e-9, cnt * sxx - sx * sx);
-    }
-
-    // Session VWAP so far
-    let pv = 0, vol = 0;
-    for (let i = 0; i <= step; i++) {
-      pv += path.prices[i] * path.volumes[i];
-      vol += path.volumes[i];
-    }
-    const vwap = vol > 0 ? pv / vol : p;
-
-    const sigma = p * meta.dailyVol * Math.sqrt(Math.max(remainingFrac, 1 / n));
-    const trendMove = p * slope * (n - step) * 0.35;
-    const reversionMove = (vwap - p) * 0.25 * remainingFrac;
-    const move = Math.max(-1.2 * sigma, Math.min(1.2 * sigma, trendMove + reversionMove));
-    const expected = round2(p + move);
-
-    const threshold = p * 0.0003;
-    const direction: 'UP' | 'DOWN' | 'SIDEWAYS' = move > threshold ? 'UP' : move < -threshold ? 'DOWN' : 'SIDEWAYS';
-    const z = move / Math.max(1e-9, sigma);
-    const pUp = 1 / (1 + Math.exp(-2.2 * z));
-
-    return {
-      price: p,
-      expected,
-      sigma,
-      lower: round2(expected - 1.282 * sigma),
-      upper: round2(expected + 1.282 * sigma),
-      stabLow: round2(expected - Math.max(p * 0.0008, 0.45 * sigma)),
-      stabHigh: round2(expected + Math.max(p * 0.0008, 0.45 * sigma)),
-      direction,
-      pUp,
-      confidence: Math.round((0.5 + 0.4 * (1 - remainingFrac)) * 100) / 100,
-    };
+  private forecastCloseAt(path: SessionPath, step: number): CloseForecastResult {
+    return forecastClose({
+      prices: path.prices,
+      volumes: path.volumes,
+      step,
+      totalSteps: path.prices.length,
+      dailyVol: METAS[path.session.symbol].dailyVol,
+      trendWindow: Math.round(1800 / STEP_SEC),
+    });
   }
 
   private lockStep(path: SessionPath): number {
@@ -389,50 +342,8 @@ export class EdgeSimulationEngine {
       const f = this.forecastCloseAt(path, lockStep);
       evals.push({ ...f, current: path.prices[lockStep], actual: path.prices[path.prices.length - 1] });
     }
-    return calculateMetrics(evals, meta.tickSize);
+    return calculateAccuracy(evals, meta.tickSize);
   }
-}
-
-function calculateMetrics(
-  evals: { expected: number; lower: number; upper: number; stabLow: number; stabHigh: number; direction: string; current: number; actual: number }[],
-  tickSize: number,
-): AccuracyReport {
-  const n = evals.length;
-  let absSum = 0, sqSum = 0, smape = 0, dir = 0, range = 0, stab = 0;
-  let exact = 0, t05 = 0, t10 = 0, t20 = 0, t30 = 0;
-  for (const e of evals) {
-    const err = Math.abs(e.expected - e.actual);
-    absSum += err;
-    sqSum += err * err;
-    smape += (err / ((Math.abs(e.actual) + Math.abs(e.expected)) / 2)) * 100;
-    const move = e.actual - e.current;
-    if ((e.direction === 'UP' && move > 0) || (e.direction === 'DOWN' && move < 0) || (e.direction === 'SIDEWAYS' && Math.abs(move) <= e.current * 0.0003)) dir++;
-    if (e.lower <= e.actual && e.actual <= e.upper) range++;
-    if (e.stabLow <= e.actual && e.actual <= e.stabHigh) stab++;
-    const pct = (err / e.actual) * 100;
-    if (err <= tickSize) exact++;
-    if (pct <= 0.05) t05++;
-    if (pct <= 0.1) t10++;
-    if (pct <= 0.2) t20++;
-    if (pct <= 0.3) t30++;
-  }
-  const pctOf = (v: number) => Math.round((v / n) * 1000) / 10;
-  return {
-    total_predictions: n,
-    mae: round2(absSum / n),
-    rmse: round2(Math.sqrt(sqSum / n)),
-    smape: round2(smape / n),
-    direction_accuracy: pctOf(dir),
-    range_coverage: pctOf(range),
-    stabilization_hit_rate: pctOf(stab),
-    tolerances: {
-      exact_match: pctOf(exact),
-      within_0_05_pct: pctOf(t05),
-      within_0_10_pct: pctOf(t10),
-      within_0_20_pct: pctOf(t20),
-      within_0_30_pct: pctOf(t30),
-    },
-  };
 }
 
 export const edgeEngine = new EdgeSimulationEngine();

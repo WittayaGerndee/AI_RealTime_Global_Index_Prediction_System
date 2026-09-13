@@ -56,6 +56,8 @@ const props = defineProps<{
   symbols: string[];
   selectedSymbol: string;
   now: Date;
+  /** Status reported by the data source, e.g. HOLIDAY. */
+  statusOverrides?: Record<string, string>;
 }>();
 
 defineEmits(['select']);
@@ -66,6 +68,7 @@ const STATUS_CLASS = {
   LUNCH: 'text-sky-300',
   PRE_OPEN: 'text-indigo-300',
   CLOSED: 'text-gray-400',
+  HOLIDAY: 'text-rose-300',
 };
 
 const rows = computed(() =>
@@ -74,7 +77,7 @@ const rows = computed(() =>
     // Show today's session while it runs, otherwise the upcoming one
     const s = state.status === 'CLOSED' ? state.next : state.current;
     const seg = s.segments.map((x) => `${formatThaiTime(x.open)}–${formatThaiTime(x.close)}`);
-    const status = displayStatus(state, props.now);
+    const status = props.statusOverrides?.[symbol] === 'HOLIDAY' ? 'HOLIDAY' : displayStatus(state, props.now);
     return {
       symbol,
       dateLabel: formatThaiDate(s.open),

@@ -13,6 +13,8 @@ export interface MarketSummary {
   data_latency_ms: number;
   is_stale: boolean;
   market_status: string;
+  /** Time of the latest price from the data source (ISO). */
+  last_update?: string;
   expected_close: number;
   close_forecast?: CloseForecast;
   prediction_range: {

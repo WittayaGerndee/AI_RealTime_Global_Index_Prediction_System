@@ -11,7 +11,7 @@ from backend.app.services import market_hours
 logger = logging.getLogger("data_collector")
 
 class MarketDataCollector:
-    SYMBOLS = ["NIKKEI225", "DJI", "HSI", "SSE"]
+    SYMBOLS = ["NIKKEI225", "DJI", "HSI", "SZSE"]
 
     def __init__(self):
         self.provider = get_market_data_provider()

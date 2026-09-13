@@ -201,13 +201,13 @@ CREATE TABLE IF NOT EXISTS market_sessions (
     UNIQUE (instrument_id, session_date)
 );
 
--- Seed Default Instruments (Nikkei 225, Dow Jones, Hang Seng, SSE Composite)
+-- Seed Default Instruments (Nikkei 225, Dow Jones, Hang Seng, SZSE Component)
 INSERT INTO instruments (code, name, provider, provider_symbol, market, timezone, currency, tick_size, price_decimals, is_active)
 VALUES
     ('NIKKEI225', 'Nikkei 225 Index', 'twelve_data', 'NI225', 'TSE', 'Asia/Tokyo', 'JPY', 5.0, 2, TRUE),
     ('DJI', 'Dow Jones Industrial Average', 'twelve_data', 'DJI', 'NYSE', 'America/New_York', 'USD', 1.0, 2, TRUE),
     ('HSI', 'Hang Seng Index', 'twelve_data', 'HSI', 'HKEX', 'Asia/Hong_Kong', 'HKD', 1.0, 2, TRUE),
-    ('SSE', 'Shanghai Composite Index', 'twelve_data', '000001.SS', 'SSE', 'Asia/Shanghai', 'CNY', 0.01, 2, TRUE)
+    ('SZSE', 'SZSE Component Index', 'twelve_data', '399001.SZ', 'SZSE', 'Asia/Shanghai', 'CNY', 0.01, 2, TRUE)
 ON CONFLICT (code) DO NOTHING;
 
 -- Seed Default Active Model

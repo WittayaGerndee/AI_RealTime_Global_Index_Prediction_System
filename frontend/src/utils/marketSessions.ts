@@ -7,7 +7,8 @@ export const THAI_TZ = 'Asia/Bangkok';
 /** Minutes before the final close at which the predicted close is locked. */
 export const LOCK_MINUTES_BEFORE_CLOSE = 30;
 
-export type SessionStatus = 'PRE_OPEN' | 'OPEN' | 'LUNCH' | 'LOCKED' | 'CLOSED';
+/** HOLIDAY is only reported by real data (no bars on a scheduled trading day). */
+export type SessionStatus = 'PRE_OPEN' | 'OPEN' | 'LUNCH' | 'LOCKED' | 'CLOSED' | 'HOLIDAY';
 
 interface Segment {
   open: string; // exchange-local "HH:mm"
@@ -23,7 +24,8 @@ export const EXCHANGE_SCHEDULES: Record<string, ExchangeSchedule> = {
   // TSE extended its close to 15:30 JST in Nov 2024
   NIKKEI225: { timezone: 'Asia/Tokyo', segments: [{ open: '09:00', close: '11:30' }, { open: '12:30', close: '15:30' }] },
   HSI: { timezone: 'Asia/Hong_Kong', segments: [{ open: '09:30', close: '12:00' }, { open: '13:00', close: '16:00' }] },
-  SSE: { timezone: 'Asia/Shanghai', segments: [{ open: '09:30', close: '11:30' }, { open: '13:00', close: '15:00' }] },
+  // Shenzhen shares China Standard Time with Shanghai
+  SZSE: { timezone: 'Asia/Shanghai', segments: [{ open: '09:30', close: '11:30' }, { open: '13:00', close: '15:00' }] },
   DJI: { timezone: 'America/New_York', segments: [{ open: '09:30', close: '16:00' }] },
 };
 
@@ -256,4 +258,5 @@ export const STATUS_LABELS: Record<SessionStatus, string> = {
   LUNCH: 'พักกลางวัน',
   LOCKED: 'ล็อกคาดการณ์แล้ว',
   CLOSED: 'ปิดแล้ว',
+  HOLIDAY: 'วันหยุดตลาด',
 };

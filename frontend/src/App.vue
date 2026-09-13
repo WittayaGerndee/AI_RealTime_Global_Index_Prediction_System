@@ -1,15 +1,15 @@
 <template>
   <div class="min-h-screen bg-dark-900 text-gray-100 flex flex-col font-sans">
     <!-- Header -->
-    <Header :isLive="isLive" @open-accuracy="isAccuracyOpen = true" />
+    <Header :source="dataSource" @open-accuracy="isAccuracyOpen = true" />
 
     <!-- Data Source & Thai Clock -->
-    <DataQualityBar :isLive="isLive" :symbols="SYMBOLS" :now="now" />
+    <DataQualityBar :source="dataSource" :symbols="SYMBOLS" :now="now" />
 
     <!-- Main Content Container -->
     <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
       <!-- Market Hours in Thai Time -->
-      <SessionSchedule :symbols="SYMBOLS" :selectedSymbol="selectedSymbol" :now="now" @select="selectedSymbol = $event" />
+      <SessionSchedule :symbols="SYMBOLS" :selectedSymbol="selectedSymbol" :now="now" :statusOverrides="statusOverrides" @select="selectedSymbol = $event" />
 
       <!-- Market Cards Overview -->
       <div>
@@ -162,7 +162,7 @@ import AccuracyReportModal from './components/AccuracyReportModal.vue';
 import DisclaimerBanner from './components/DisclaimerBanner.vue';
 
 import { MarketSummary, Candle, HorizonPrediction, AccuracyReport } from './types/market';
-import { apiClient } from './api/client';
+import { apiClient, DataSource } from './api/client';
 import { SYMBOLS } from './api/edgeSimulation';
 import { getSessionState } from './utils/marketSessions';
 
@@ -176,7 +176,7 @@ const SHORT_HORIZONS = [
 ];
 
 const now = ref(new Date());
-const isLive = ref(false);
+const dataSource = ref<DataSource>('demo');
 const markets = ref<MarketSummary[]>([]);
 const selectedSymbol = ref<string>('NIKKEI225');
 const candles = ref<Candle[]>([]);
@@ -191,6 +191,8 @@ let dataInterval: ReturnType<typeof setInterval> | null = null;
 const activeMarket = computed(() => {
   return markets.value.find(m => m.symbol === selectedSymbol.value) || markets.value[0];
 });
+
+const statusOverrides = computed(() => Object.fromEntries(markets.value.map((m) => [m.symbol, m.market_status])));
 
 const closeForecast = computed(() => activeMarket.value?.close_forecast);
 const closePrediction = computed(() => horizons.value['Close'] || horizons.value['5m']);
@@ -238,7 +240,8 @@ async function loadSelected() {
 }
 
 async function refreshData() {
-  isLive.value = apiClient.isLiveBackend;
+  await apiClient.refreshLocalData();
+  dataSource.value = apiClient.dataSource;
   markets.value = await apiClient.getMarkets();
   await loadSelected();
 }

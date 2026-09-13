@@ -11,7 +11,7 @@ MARKET_METADATA = {
     "NIKKEI225": {"name": "Nikkei 225", "market": "TSE", "timezone": "Asia/Tokyo", "currency": "JPY", "tick_size": 5.0},
     "DJI": {"name": "Dow Jones Industrial Average", "market": "NYSE", "timezone": "America/New_York", "currency": "USD", "tick_size": 1.0},
     "HSI": {"name": "Hang Seng Index", "market": "HKEX", "timezone": "Asia/Hong_Kong", "currency": "HKD", "tick_size": 1.0},
-    "SSE": {"name": "Shanghai Composite Index", "market": "SSE", "timezone": "Asia/Shanghai", "currency": "CNY", "tick_size": 0.01},
+    "SZSE": {"name": "SZSE Component Index", "market": "SZSE", "timezone": "Asia/Shanghai", "currency": "CNY", "tick_size": 0.01},
 }
 
 @router.get("")
