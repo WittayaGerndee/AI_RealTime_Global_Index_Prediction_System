@@ -6,8 +6,24 @@
     <!-- Data Source & Thai Clock -->
     <DataQualityBar :source="dataSource" :symbols="SYMBOLS" :now="now" />
 
+    <!-- Page tabs -->
+    <nav class="max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 pt-5 flex gap-2">
+      <a
+        v-for="tab in PAGES"
+        :key="tab.id"
+        :href="`#${tab.id}`"
+        :class="['px-4 py-2 rounded-xl text-sm font-semibold border', page === tab.id ? 'bg-blue-600 border-blue-500 text-white' : 'bg-dark-800 border-gray-800 text-gray-300 hover:bg-dark-700']"
+      >
+        {{ tab.label }}
+      </a>
+    </nav>
+
+    <main v-if="page === 'lao'" class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
+      <LaoLotteryPage />
+    </main>
+
     <!-- Main Content Container -->
-    <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
+    <main v-else class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
       <!-- Market Hours in Thai Time -->
       <SessionSchedule :symbols="SYMBOLS" :selectedSymbol="selectedSymbol" :now="now" :statusOverrides="statusOverrides" @select="selectedSymbol = $event" />
 
@@ -160,6 +176,7 @@ import CandlestickChart from './components/CandlestickChart.vue';
 import PredictionTimeline from './components/PredictionTimeline.vue';
 import AccuracyReportModal from './components/AccuracyReportModal.vue';
 import DisclaimerBanner from './components/DisclaimerBanner.vue';
+import LaoLotteryPage from './components/LaoLotteryPage.vue';
 
 import { MarketSummary, Candle, HorizonPrediction, AccuracyReport, SegmentForecast } from './types/market';
 import { apiClient, DataSource } from './api/client';
@@ -173,6 +190,14 @@ const SHORT_HORIZONS = [
   { label: '30m', minutes: 30, desc: '30 นาที' },
   { label: '60m', minutes: 60, desc: '1 ชั่วโมง' },
 ];
+
+const PAGES = [
+  { id: 'stocks', label: 'ดัชนีหุ้น' },
+  { id: 'lao', label: 'สถิติหวยลาว' },
+];
+const currentPage = () => (window.location.hash === '#lao' ? 'lao' : 'stocks');
+const page = ref(currentPage());
+const onHashChange = () => (page.value = currentPage());
 
 const now = ref(new Date());
 const dataSource = ref<DataSource>('demo');
@@ -261,6 +286,7 @@ watch(isAccuracyOpen, async (open) => {
 });
 
 onMounted(async () => {
+  window.addEventListener('hashchange', onHashChange);
   await apiClient.checkBackendHealth();
   await refreshData();
   accuracyReport.value = await apiClient.getAccuracy(selectedSymbol.value);
@@ -274,6 +300,7 @@ onMounted(async () => {
 });
 
 onUnmounted(() => {
+  window.removeEventListener('hashchange', onHashChange);
   if (clockInterval) clearInterval(clockInterval);
   if (dataInterval) clearInterval(dataInterval);
 });

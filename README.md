@@ -81,6 +81,12 @@ cp .env.example .env
 docker compose up -d
 ```
 
+### 4. อัปเดตข้อมูลหวยลาวที่รวมมากับเว็บ (ไม่บังคับ)
+หน้า "สถิติหวยลาว" ดึงงวดใหม่ ๆ ผ่าน Worker endpoint `/lao-lottery` ให้อัตโนมัติ (สูงสุด 45 วันหลังข้อมูลที่รวมไว้) ถ้าข้อมูลที่รวมไว้เก่าเกินนั้น ให้รัน:
+```bash
+python3 scripts/fetch_lao_lottery.py
+```
+
 ---
 
 ## คำเตือนทางกฎหมายและการเงิน (Financial Disclaimer)
