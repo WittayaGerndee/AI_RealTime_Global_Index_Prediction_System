@@ -22,9 +22,19 @@
         </div>
 
         <!-- Connection Status -->
-        <div class="flex items-center space-x-2 px-3 py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-xs text-emerald-400">
+        <div
+          v-if="isLive"
+          class="flex items-center space-x-2 px-3 py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-xs text-emerald-400"
+        >
           <span class="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
           <span class="font-medium">Live Stream</span>
+        </div>
+        <div
+          v-else
+          class="flex items-center space-x-2 px-3 py-1.5 rounded-full bg-amber-500/10 border border-amber-500/30 text-xs text-amber-400"
+        >
+          <span class="w-2 h-2 rounded-full bg-amber-400"></span>
+          <span class="font-medium">โหมดจำลอง</span>
         </div>
 
         <button
@@ -40,5 +50,6 @@
 </template>
 
 <script setup lang="ts">
+defineProps<{ isLive: boolean }>();
 defineEmits(['open-accuracy']);
 </script>

@@ -3,6 +3,7 @@ from typing import Dict, Any
 from datetime import datetime, timezone
 from data_collector.collector_service import collector_service
 from backend.app.core.config import settings
+from backend.app.services import market_hours
 
 router = APIRouter()
 
@@ -35,7 +36,7 @@ async def data_status() -> Dict[str, Any]:
     return {
         "provider": collector_service.provider.name,
         "connected": collector_service.provider.is_connected,
-        "market_session": "OPEN",
+        "market_sessions": {sym: market_hours.get_session_state(sym, now)["status"] for sym in collector_service.SYMBOLS},
         "data_delay_type": "REALTIME",
         "symbols": ticks_status,
         "timestamp": now.isoformat()

@@ -14,6 +14,7 @@ export interface MarketSummary {
   is_stale: boolean;
   market_status: string;
   expected_close: number;
+  close_forecast?: CloseForecast;
   prediction_range: {
     lower: number;
     upper: number;
@@ -28,6 +29,20 @@ export interface MarketSummary {
   };
   confidence: number;
   convergence_stability: 'HIGH' | 'LOW';
+}
+
+/** Session closing-price forecast; frozen from 30 minutes before the close. */
+export interface CloseForecast {
+  session_date: string;
+  value: number;
+  lower: number;
+  upper: number;
+  locked: boolean;
+  locked_at: string | null;
+  price_at_lock: number | null;
+  actual_close: number | null;
+  error: number | null;
+  error_pct: number | null;
 }
 
 export interface Candle {

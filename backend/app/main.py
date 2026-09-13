@@ -12,6 +12,7 @@ from data_collector.collector_service import collector_service
 from feature_engine.calculator import FeatureCalculator
 from prediction_engine.inference.service import prediction_service
 from backend.app.services.accuracy_service import accuracy_service
+from backend.app.services import market_hours
 
 logger = setup_logging(settings.LOG_LEVEL)
 
@@ -42,6 +43,13 @@ async def prediction_loop():
         try:
             for sym in collector_service.SYMBOLS:
                 tick = collector_service.latest_ticks.get(sym)
+                status = market_hours.get_session_state(sym)["status"]
+                if status == market_hours.STATUS_CLOSED and tick:
+                    # Session over: keep the locked forecast and attach the realized close
+                    prediction_service.record_close(sym, tick.price)
+                    continue
+                if status == market_hours.STATUS_LUNCH:
+                    continue
                 if tick and not tick.is_stale:
                     candles = await collector_service.provider.get_historical(sym, timeframe="5m", limit=30)
                     feats = FeatureCalculator.calculate_features(

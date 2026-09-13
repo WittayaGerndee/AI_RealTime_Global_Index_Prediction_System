@@ -12,7 +12,7 @@ class SupportResistanceEngine:
         day_high: float,
         day_low: float,
         prev_close: float,
-        rolling_prices: np.ndarray,
+        rolling_prices: List[float],
         bb_upper: float,
         bb_lower: float
     ) -> Dict[str, List[Dict[str, Any]]]:

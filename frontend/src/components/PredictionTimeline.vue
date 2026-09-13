@@ -3,7 +3,7 @@
     <div class="flex items-center justify-between mb-4">
       <div>
         <h3 class="text-base font-bold text-white flex items-center gap-2">
-          <span>Prediction Convergence & Accuracy Timeline</span>
+          <span>ความเคลื่อนไหวของราคาคาดการณ์ราคาปิด</span>
           <span
             :class="[
               'text-[11px] font-bold px-2 py-0.5 rounded-full border',
@@ -12,20 +12,20 @@
                 : 'bg-amber-500/10 text-amber-400 border-amber-500/30'
             ]"
           >
-            Stability: {{ stability }}
+            เสถียรภาพ: {{ stability }}
           </span>
         </h3>
-        <p class="text-xs text-gray-400">Actual vs Historical Model Predictions (Requirement Section 24 & 25)</p>
+        <p class="text-xs text-gray-400">ราคาจริงเทียบกับราคาปิดที่คาดการณ์ ทุก 5 นาที (เส้นคาดการณ์จะนิ่งหลังล็อก)</p>
       </div>
 
       <div class="flex items-center space-x-3 text-xs">
         <div class="flex items-center gap-1.5">
           <span class="w-3 h-0.5 bg-emerald-400"></span>
-          <span class="text-gray-300">Actual Price</span>
+          <span class="text-gray-300">ราคาจริง</span>
         </div>
         <div class="flex items-center gap-1.5">
           <span class="w-3 h-0.5 bg-blue-400 border-t border-dashed"></span>
-          <span class="text-gray-300">Expected (AI)</span>
+          <span class="text-gray-300">คาดการณ์ราคาปิด</span>
         </div>
       </div>
     </div>
@@ -52,7 +52,7 @@
         <path :d="predPath" fill="none" stroke="#60A5FA" stroke-width="2" stroke-dasharray="4 3" />
       </svg>
       <div v-else class="h-full flex items-center justify-center text-xs text-gray-500">
-        Collecting prediction snapshots...
+        รอข้อมูลหลังเปิดตลาด...
       </div>
     </div>
   </div>

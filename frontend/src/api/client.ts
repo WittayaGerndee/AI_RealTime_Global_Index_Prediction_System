@@ -11,10 +11,6 @@ class MarketApiClient {
   private wsPred: WebSocket | null = null;
   private listeners: Record<string, Function[]> = {};
 
-  constructor() {
-    this.checkBackendHealth();
-  }
-
   public async checkBackendHealth(): Promise<boolean> {
     try {
       const res = await fetch(`${API_BASE}/system/health`, { signal: AbortSignal.timeout(1500) });
@@ -62,6 +58,20 @@ class MarketApiClient {
       } catch {}
     }
     return edgeEngine.getPrediction(symbol, 5);
+  }
+
+  /** Forecasts keyed by horizon label ("1m" … "60m", "Close"). */
+  public async getHorizons(symbol: string): Promise<Record<string, HorizonPrediction>> {
+    if (this.isLiveBackend) {
+      try {
+        const res = await fetch(`${API_BASE}/predictions/${symbol}`);
+        if (res.ok) return (await res.json()).horizons;
+      } catch {}
+    }
+    const out: Record<string, HorizonPrediction> = {};
+    for (const h of [1, 5, 15, 30, 60]) out[`${h}m`] = edgeEngine.getPrediction(symbol, h);
+    out['Close'] = edgeEngine.getClosePrediction(symbol);
+    return out;
   }
 
   public async getAccuracy(symbol: string): Promise<AccuracyReport> {

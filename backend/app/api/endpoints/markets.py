@@ -3,6 +3,7 @@ from typing import List, Dict, Any, Optional
 from data_collector.collector_service import collector_service
 from feature_engine.calculator import FeatureCalculator
 from prediction_engine.inference.service import prediction_service
+from backend.app.services import market_hours
 
 router = APIRouter()
 
@@ -44,6 +45,7 @@ async def get_all_markets() -> List[Dict[str, Any]]:
             )
             pred = prediction_service.generate_all_horizons(symbol, feats)
 
+        session_state = market_hours.get_session_state(symbol)
         results.append({
             "symbol": symbol,
             "name": meta["name"],
@@ -58,8 +60,11 @@ async def get_all_markets() -> List[Dict[str, Any]]:
             "change_percent": change_pct,
             "data_latency_ms": tick.latency_ms,
             "is_stale": tick.is_stale,
-            "market_status": "OPEN", # In active simulation
+            "market_status": session_state["status"],
+            "session": session_state["current"].to_dict(),
+            "next_session": session_state["next"].to_dict(),
             "expected_close": pred["expected_close"],
+            "close_forecast": pred.get("close_forecast"),
             "prediction_range": pred["prediction_range"],
             "direction": pred["direction"],
             "direction_probability": pred["direction_probability"],

@@ -3,37 +3,51 @@
     <div class="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-y-2">
       <div class="flex items-center space-x-6 flex-wrap gap-y-1">
         <div class="flex items-center space-x-2">
-          <span class="text-gray-500">Provider:</span>
-          <span class="text-gray-200 font-mono font-medium">Twelve Data / Replay</span>
+          <span class="text-gray-500">เวลาไทย:</span>
+          <span class="text-gray-100 font-mono font-semibold">{{ thaiClock }}</span>
         </div>
         <div class="flex items-center space-x-2">
-          <span class="text-gray-500">WebSocket:</span>
-          <span class="inline-flex items-center gap-1 text-emerald-400 font-medium">
-            <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span> CONNECTED
+          <span class="text-gray-500">แหล่งข้อมูล:</span>
+          <span v-if="isLive" class="inline-flex items-center gap-1 text-emerald-400 font-medium">
+            <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span> Backend (Live)
+          </span>
+          <span v-else class="inline-flex items-center gap-1 text-amber-400 font-medium">
+            <span class="w-1.5 h-1.5 rounded-full bg-amber-400"></span> ข้อมูลจำลอง (Demo)
           </span>
         </div>
         <div class="flex items-center space-x-2">
-          <span class="text-gray-500">Feed Latency:</span>
-          <span class="font-mono text-gray-200">~8 ms</span>
-        </div>
-        <div class="flex items-center space-x-2">
-          <span class="text-gray-500">Market Sessions:</span>
-          <span class="px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 text-[10px] font-bold">ACTIVE</span>
-        </div>
-      </div>
-
-      <div class="flex items-center space-x-4">
-        <div class="flex items-center space-x-1.5">
-          <span class="text-gray-500">Quant Calibration:</span>
-          <span class="text-indigo-400 font-mono font-semibold">Bayesian Online</span>
-        </div>
-        <div class="flex items-center space-x-1.5">
-          <span class="text-gray-500">Data Integrity:</span>
-          <span class="text-cyan-400 font-mono font-semibold">Strict No-Leakage</span>
+          <span class="text-gray-500">ตลาดที่เปิดอยู่:</span>
+          <span class="font-mono text-gray-200">{{ openCount }} / {{ symbols.length }}</span>
         </div>
       </div>
     </div>
   </div>
 </template>
 
-<script setup lang="ts"></script>
+<script setup lang="ts">
+import { computed } from 'vue';
+import { getSessionState, THAI_TZ } from '../utils/marketSessions';
+
+const props = defineProps<{
+  isLive: boolean;
+  symbols: string[];
+  now: Date;
+}>();
+
+const clockFmt = new Intl.DateTimeFormat('th-TH', {
+  timeZone: THAI_TZ,
+  weekday: 'short',
+  day: 'numeric',
+  month: 'short',
+  hour: '2-digit',
+  minute: '2-digit',
+  second: '2-digit',
+  hourCycle: 'h23',
+});
+
+const thaiClock = computed(() => clockFmt.format(props.now));
+
+const openCount = computed(
+  () => props.symbols.filter((s) => ['OPEN', 'LOCKED'].includes(getSessionState(s, props.now).status)).length,
+);
+</script>

@@ -6,6 +6,7 @@ from typing import Dict, Any, List
 from data_collector.providers.factory import get_market_data_provider
 from data_collector.normalizer import TickNormalizer, NormalizedTick
 from backend.app.core.config import settings
+from backend.app.services import market_hours
 
 logger = logging.getLogger("data_collector")
 
@@ -31,6 +32,10 @@ class MarketDataCollector:
         while self.running:
             try:
                 for symbol in self.SYMBOLS:
+                    # Outside trading hours the price does not change: skip polling
+                    # once the last traded price is known
+                    if symbol in self.latest_ticks and not market_hours.is_trading(symbol):
+                        continue
                     raw = await self.provider.get_quote(symbol)
                     normalized = self.normalizer.normalize(raw, self.provider.name)
                     if normalized:
