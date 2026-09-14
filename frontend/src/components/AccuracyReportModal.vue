@@ -59,7 +59,7 @@
               <td class="py-1.5 pr-2 font-sans text-gray-200">{{ seg.label }}</td>
               <td class="py-1.5 pr-2 text-amber-300">{{ seg.lock_time_th }}</td>
               <td class="py-1.5 pr-2 text-gray-300">{{ seg.total }}</td>
-              <td class="py-1.5 pr-2 font-sans text-gray-300">{{ seg.model === 'ridge' ? 'Ridge' : 'Random walk' }}</td>
+              <td class="py-1.5 pr-2 font-sans text-gray-300">{{ MODEL_LABELS[seg.model] }}</td>
               <td class="py-1.5 pr-2 text-gray-100">{{ seg.mae }} ({{ seg.mae_pct.toFixed(2) }}%)</td>
               <td class="py-1.5 pr-2 text-gray-400">{{ seg.baseline_mae }}</td>
               <td class="py-1.5 pr-2 text-emerald-400">{{ seg.within_0_10_pct }}%</td>
@@ -128,6 +128,7 @@
 
 <script setup lang="ts">
 import { AccuracyReport } from '../types/market';
+import { MODEL_LABELS } from '../utils/closeForecast';
 
 defineProps<{
   symbol: string;

@@ -65,26 +65,34 @@
         :key="f.segment_index"
         :class="[
           'rounded-xl p-3 border space-y-1.5',
-          f.status === 'LIVE' ? 'bg-dark-900/80 border-gray-800/80' : 'bg-amber-500/5 border-amber-500/30'
+          f.locked ? 'bg-amber-500/5 border-amber-500/30' : 'bg-dark-900/80 border-gray-800/80'
         ]"
       >
         <div class="flex items-center justify-between text-xs gap-2">
           <span class="text-gray-300 font-semibold whitespace-nowrap">
             คาดการณ์{{ f.label === 'ทั้งวัน' ? 'ราคาปิด' : `ปิด${f.label}` }}
-            <span v-if="f.status !== 'LIVE'" class="text-amber-400">🔒</span>
+            <span v-if="f.locked" class="text-amber-400">🔒</span>
           </span>
-          <span :class="['font-mono font-bold text-sm', f.status === 'LIVE' ? 'text-blue-400' : 'text-amber-300']">
+          <span v-if="f.locked" class="font-mono font-bold text-sm text-amber-300">
             {{ formatPrice(f.value) }}
           </span>
+          <span v-else-if="f.status === 'CALCULATING'" class="text-[11px] text-blue-400 animate-pulse whitespace-nowrap">กำลังคำนวณ…</span>
+          <span v-else class="font-mono text-[11px] text-blue-400 whitespace-nowrap">
+            คำนวณในอีก {{ formatCountdown(new Date(f.lock_at).getTime() - now.getTime()) }}
+          </span>
         </div>
-        <div class="flex items-center justify-between text-[11px] gap-2">
+        <div v-if="f.locked" class="flex items-center justify-between text-[11px] gap-2">
           <span class="text-gray-500 whitespace-nowrap">ช่วง 80%</span>
           <span class="font-mono text-gray-300">{{ formatPrice(f.lower) }} - {{ formatPrice(f.upper) }}</span>
         </div>
-        <div class="text-[10px]" :class="f.status === 'LIVE' ? 'text-gray-500' : 'text-amber-400'">
-          {{ f.status === 'LIVE'
-            ? `ล็อกเวลา ${formatThaiTime(new Date(f.lock_at))} น. • ปิด ${formatThaiTime(new Date(f.close_at))} น.`
-            : `ล็อกแล้ว ${formatThaiTime(new Date(f.lock_at))} น. • ปิด ${formatThaiTime(new Date(f.close_at))} น.` }}
+        <div v-if="f.locked && f.price_at_lock != null" class="flex items-center justify-between text-[11px] gap-2">
+          <span class="text-gray-500 whitespace-nowrap">ราคา ณ เวลาล็อก</span>
+          <span class="font-mono text-gray-400">{{ formatPrice(f.price_at_lock) }}</span>
+        </div>
+        <div class="text-[10px]" :class="f.locked ? 'text-amber-400' : 'text-gray-500'">
+          {{ f.locked
+            ? `ล็อกแล้ว ${formatThaiTime(new Date(f.lock_at))} น. • ตัวเลขนี้ไม่เปลี่ยนจนปิด ${formatThaiTime(new Date(f.close_at))} น.`
+            : `ระบบจะคำนวณราคาปิดเวลา ${formatThaiTime(new Date(f.lock_at))} น. แล้วล็อกไว้ • ปิด ${formatThaiTime(new Date(f.close_at))} น.` }}
         </div>
         <template v-if="f.actual_close != null">
           <div class="flex items-center justify-between text-xs pt-1.5 border-t border-gray-800">
@@ -114,7 +122,7 @@
       </div>
       <div class="flex items-center gap-1.5">
         <span>ความมั่นใจ:</span>
-        <span class="font-mono font-bold text-gray-200">{{ Math.round(market.confidence * 100) }}%</span>
+        <span class="font-mono font-bold text-gray-200">{{ market.close_forecast?.locked ? `${Math.round(market.confidence * 100)}%` : '—' }}</span>
       </div>
     </div>
   </div>

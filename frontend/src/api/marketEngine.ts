@@ -25,7 +25,9 @@ import {
   predictSegment,
   calculateAccuracy,
   round2,
+  MODEL_LABELS,
 } from '../utils/closeForecast';
+import { lockKey, loadLocked, saveLocked, toResult } from './lockedForecastStore';
 
 // Turns 5-minute bars from a BarSource (real Yahoo Finance data or the offline simulation)
 // into market summaries and per-segment closing forecasts. Forecasts only use bars
@@ -56,6 +58,9 @@ const METAS: Record<string, { name: string; market: string; currency: string; ti
 };
 
 const SESSIONS_BACK = 65;
+/** Fixed training window so a forecast does not drift as Yahoo's 60-day range slides. */
+const TRAIN_SESSIONS = 35;
+const LOCK_SETTLE_MS = 10 * 60_000;
 const MIN_TRAIN_WALK_FORWARD = 15;
 const HOLIDAY_GRACE_MS = 20 * 60_000;
 
@@ -169,25 +174,60 @@ export class MarketEngine {
     return prev ? this.lastPrice(symbol, prev, now) : sb.bars[0].open;
   }
 
-  private forecastSegment(symbol: string, sb: SessionBars, seg: TradingSegment, now: Date): { forecast: SegmentForecast; result: SegmentForecastResult } | null {
-    const t = now.getTime();
-    const locked = t >= seg.lockAt.getTime();
-    const at = locked ? seg.lockAt.getTime() : t;
+  /** The last TRAIN_SESSIONS finished sessions before `sb`, oldest first — independent of the current time. */
+  private trainingBefore(symbol: string, sb: SessionBars, now: Date): SessionBars[] {
+    return this.sessions(symbol, now)
+      .filter((s) => s.session.dateKey < sb.session.dateKey)
+      .slice(0, TRAIN_SESSIONS)
+      .reverse();
+  }
+
+  /** Forecast of the segment close from the bars completed by `at`. */
+  private computeSegment(symbol: string, sb: SessionBars, seg: TradingSegment, at: number, moment: ForecastMoment, price: number | null, now: Date): SegmentForecastResult | null {
     const idx = lastCompletedIndex(sb.bars, at);
     if (idx < 0) return null;
-
-    // Live forecasts follow the latest price; locked ones use the bar completed at the lock time
-    const price = locked ? sb.bars[idx].close : this.lastPrice(symbol, sb, now);
-    const moment: ForecastMoment = locked ? { kind: 'lock' } : { kind: 'before_close', ms: seg.close.getTime() - t };
-    const train = this.trainingSessions(symbol, now, sb.session.dateKey);
+    const p = price ?? sb.bars[idx].close;
+    const train = this.trainingBefore(symbol, sb, now);
     const model = this.model(symbol, seg.index, moment, train);
     const barsToClose = Math.max(1, (seg.close.getTime() - at) / BAR_MS);
-    const result = predictSegment(model, price, featuresAt(sb.bars, idx, price), this.perBarVol(symbol, train) * Math.sqrt(barsToClose));
+    return predictSegment(model, p, featuresAt(sb.bars, idx, p), this.perBarVol(symbol, train) * Math.sqrt(barsToClose));
+  }
+
+  private forecastSegment(symbol: string, sb: SessionBars, seg: TradingSegment, now: Date): { forecast: SegmentForecast; result: SegmentForecastResult } | null {
+    const t = now.getTime();
+    const lockAt = seg.lockAt.getTime();
+    const locked = t >= lockAt;
+
+    let result: SegmentForecastResult | null;
+    let status: SegmentForecast['status'];
+    if (!locked) {
+      // Before the lock the close is not calculated yet; this estimate only feeds the short horizons
+      result = this.computeSegment(symbol, sb, seg, t, { kind: 'before_close', ms: seg.close.getTime() - t }, this.lastPrice(symbol, sb, now), now);
+      status = 'WAITING';
+    } else {
+      const key = lockKey(this.modelVersion, symbol, sb.session.dateKey, seg.index);
+      const stored = loadLocked(key);
+      if (stored) {
+        result = toResult(stored);
+        status = 'LOCKED';
+      } else {
+        result = this.computeSegment(symbol, sb, seg, lockAt, { kind: 'lock' }, null, now);
+        // Freeze only once the bar ending at the lock time has settled (data can arrive a little late)
+        const settled = sb.bars.some((b) => b.t >= lockAt) || t >= lockAt + LOCK_SETTLE_MS;
+        if (result && settled) {
+          saveLocked(key, result);
+          status = 'LOCKED';
+        } else {
+          status = 'CALCULATING';
+        }
+      }
+    }
+    if (!result) return null;
 
     const closedAt = seg.close.getTime() + (seg.isFinal ? FINAL_CLOSE_GRACE_MS : 0);
     const target = segmentCloseIndex(sb.bars, seg);
     let actual: number | null = null;
-    if (t >= seg.close.getTime() && target >= 0 && (t >= closedAt || !seg.isFinal)) {
+    if (status === 'LOCKED' && t >= seg.close.getTime() && target >= 0 && (t >= closedAt || !seg.isFinal)) {
       actual = seg.isFinal ? this.lastPrice(symbol, sb, now) : sb.bars[target].close;
     }
 
@@ -196,16 +236,16 @@ export class MarketEngine {
       label: seg.label,
       lock_at: seg.lockAt.toISOString(),
       close_at: seg.close.toISOString(),
-      status: actual !== null ? 'CLOSED' : locked ? 'LOCKED' : 'LIVE',
-      model: model.kind,
-      training_sessions: model.samples,
+      status: actual !== null && status === 'LOCKED' ? 'CLOSED' : status,
+      model: result.model.kind,
+      training_sessions: result.model.samples,
       session_date: sb.session.dateKey,
       value: result.expected,
       lower: result.lower,
       upper: result.upper,
-      locked,
-      locked_at: locked ? seg.lockAt.toISOString() : null,
-      price_at_lock: locked ? price : null,
+      locked: status === 'LOCKED',
+      locked_at: status === 'LOCKED' ? seg.lockAt.toISOString() : null,
+      price_at_lock: status === 'LOCKED' ? result.price : null,
       actual_close: actual,
       error: actual !== null ? round2(actual - result.expected) : null,
       error_pct: actual !== null ? Math.round(((actual - result.expected) / actual) * 10000) / 100 : null,
@@ -320,7 +360,7 @@ export class MarketEngine {
       symbol,
       horizon: label,
       horizon_minutes: minutes,
-      model_version: `${this.modelVersion} · ${r.model.kind === 'ridge' ? 'Ridge' : 'Random walk'}`,
+      model_version: `${this.modelVersion} · ${MODEL_LABELS[r.model.kind]}`,
       current_price: price,
       expected_price: expected,
       expected_close: r.expected,

@@ -54,9 +54,9 @@
               :symbol="activeMarket.symbol"
               :candles="candles"
               :currentPrice="activeMarket.current_price"
-              :expectedPrice="activeMarket.expected_close"
-              :predictionRange="activeMarket.prediction_range"
-              :stabilizationZone="activeMarket.stabilization_zone"
+              :expectedPrice="isLocked ? activeMarket.expected_close : undefined"
+              :predictionRange="isLocked ? activeMarket.prediction_range : undefined"
+              :stabilizationZone="isLocked ? activeMarket.stabilization_zone : undefined"
             />
 
             <!-- Close Forecast Timeline -->
@@ -100,13 +100,13 @@
                       </div>
                       <div class="text-[10px] text-gray-500">±{{ formatPrice(h.halfRange) }}</div>
                     </template>
-                    <div v-else class="text-xs text-gray-500">ตลาดไม่ได้ซื้อขาย</div>
+                    <div v-else class="text-xs text-gray-500">{{ h.pendingText }}</div>
                   </div>
                 </div>
               </div>
 
               <!-- Direction Probabilities Bar -->
-              <div v-if="closePrediction" class="pt-3 border-t border-gray-800 space-y-2">
+              <div v-if="closePrediction && isLocked" class="pt-3 border-t border-gray-800 space-y-2">
                 <div class="flex items-center justify-between text-xs">
                   <span class="text-gray-400">ทิศทางถึงราคาปิด{{ activeSegmentLabel }}:</span>
                   <span class="font-bold text-emerald-400">
@@ -137,7 +137,10 @@
               <p class="text-xs text-gray-400">
                 กรอบ 50% จากความคลาดเคลื่อนจริงในอดีต — ราคาปิด{{ activeSegmentLabel }}มีโอกาสราวครึ่งหนึ่งที่จะอยู่ในช่วงนี้
               </p>
-              <div class="bg-dark-900 rounded-xl p-3 border border-gray-800 flex items-center justify-around font-mono text-center">
+              <div v-if="!isLocked" class="bg-dark-900 rounded-xl p-3 border border-gray-800 text-xs text-gray-500 text-center">
+                {{ pendingCloseText }}
+              </div>
+              <div v-else class="bg-dark-900 rounded-xl p-3 border border-gray-800 flex items-center justify-around font-mono text-center">
                 <div>
                   <div class="text-[10px] text-gray-500">ต่ำสุด</div>
                   <div class="text-sm font-bold text-gray-200">{{ formatPrice(activeMarket.stabilization_zone.stabilization_low) }}</div>
@@ -180,7 +183,7 @@ import LaoLotteryPage from './components/LaoLotteryPage.vue';
 
 import { MarketSummary, Candle, HorizonPrediction, AccuracyReport, SegmentForecast } from './types/market';
 import { apiClient, DataSource } from './api/client';
-import { SYMBOLS, getSessionState } from './utils/marketSessions';
+import { SYMBOLS, getSessionState, formatThaiTime } from './utils/marketSessions';
 
 const DIRECTION_LABELS = { UP: 'ขึ้น', DOWN: 'ลง', SIDEWAYS: 'ทรงตัว' };
 const SHORT_HORIZONS = [
@@ -225,6 +228,12 @@ const activeSegmentLabel = computed(() => {
   const cf = activeMarket.value?.close_forecast;
   return cf && 'label' in cf && cf.label !== 'ทั้งวัน' ? (cf as SegmentForecast).label : '';
 });
+const isLocked = computed(() => !!closeForecast.value?.locked);
+const pendingCloseText = computed(() => {
+  const cf = closeForecast.value as SegmentForecast | undefined;
+  if (cf?.status === 'CALCULATING') return 'กำลังคำนวณราคาปิด…';
+  return cf && 'lock_at' in cf ? `คำนวณเวลา ${formatThaiTime(new Date(cf.lock_at))} น.` : 'รอข้อมูลหลังเปิดตลาด';
+});
 const closePrediction = computed(() => horizons.value['Close'] || horizons.value['5m']);
 
 const isTrading = computed(() => {
@@ -242,6 +251,7 @@ const horizonList = computed(() => {
       isClose: false,
       price: isTrading.value && p ? p.expected_price : null,
       halfRange: p ? (p.upper_bound - p.lower_bound) / 2 : 0,
+      pendingText: 'ตลาดไม่ได้ซื้อขาย',
     };
   });
   const cf = m.close_forecast;
@@ -250,8 +260,9 @@ const horizonList = computed(() => {
     minutes: 0,
     desc: `${cf?.locked ? '🔒 ' : ''}ราคาปิด${activeSegmentLabel.value}${cf?.locked ? ' (ล็อกแล้ว)' : ''}`,
     isClose: true,
-    price: m.expected_close,
+    price: cf?.locked ? m.expected_close : null,
     halfRange: (m.prediction_range.upper - m.prediction_range.lower) / 2,
+    pendingText: pendingCloseText.value,
   });
   return rows;
 });

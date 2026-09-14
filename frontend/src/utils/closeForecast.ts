@@ -8,9 +8,10 @@ import type { TradingSession, TradingSegment } from './marketSessions';
 // segment close. Two candidates are compared by walk-forward error on those samples:
 //   - random walk: close = last known price (the strongest baseline for index prices
 //     15–45 minutes before a close in 60-day backtests)
+//   - median drift: the typical historical move from that moment to the close
 //   - ridge regression on recent momentum, return since open and distance from the
 //     session average, heavily shrunk toward zero
-// The candidate with the lower walk-forward error is used. Prediction intervals are
+// The candidate with the lowest walk-forward error is used. Prediction intervals are
 // empirical quantiles of that model's historical errors, not a normal approximation.
 
 export const BAR_MS = 5 * 60_000;
@@ -36,7 +37,7 @@ export interface SessionBars {
   bars: Bar[]; // chronological, within [session open, session close + grace)
 }
 
-export type ModelKind = 'random_walk' | 'ridge';
+export type ModelKind = 'random_walk' | 'drift' | 'ridge';
 
 export interface SegmentModel {
   kind: ModelKind;
@@ -183,23 +184,33 @@ export function fitSegmentModel(samples: Sample[]): SegmentModel {
   };
   if (n < MIN_SAMPLES_FOR_MODEL) return randomWalk;
 
-  let rwErr = 0, ridgeErr = 0, count = 0;
+  let rwErr = 0, driftErr = 0, ridgeErr = 0, count = 0;
+  const driftResiduals: number[] = [];
   const ridgeResiduals: number[] = [];
   for (let i = Math.min(MIN_TRAIN_WALK_FORWARD, n - 1); i < n; i++) {
-    const { beta, mean, std } = fitRidge(samples.slice(0, i));
+    const past = samples.slice(0, i);
+    const d = samples[i].y - medianOf(past.map((s) => s.y));
+    const { beta, mean, std } = fitRidge(past);
     const r = samples[i].y - ridgeReturn(beta, mean, std, samples[i].x);
+    driftResiduals.push(d);
     ridgeResiduals.push(r);
     rwErr += Math.abs(samples[i].y);
+    driftErr += Math.abs(d);
     ridgeErr += Math.abs(r);
     count++;
   }
   const baselineMae = rwErr / count;
+  const driftMae = driftErr / count;
   const ridgeMae = ridgeErr / count;
 
-  // Require a clear improvement before trusting the regression over the random walk
-  if (ridgeMae < baselineMae * 0.98) {
+  // Require a clear improvement before trusting a candidate over the random walk
+  if (ridgeMae < baselineMae * 0.98 && ridgeMae <= driftMae) {
     const { beta, mean, std } = fitRidge(samples);
     return { kind: 'ridge', samples: n, beta, mean, std, residuals: ridgeResiduals.sort((a, b) => a - b), walkForwardMae: ridgeMae, baselineMae };
+  }
+  if (driftMae < baselineMae * 0.98) {
+    const drift = medianOf(samples.map((s) => s.y));
+    return { kind: 'drift', samples: n, beta: [drift], mean: [], std: [], residuals: driftResiduals.sort((a, b) => a - b), walkForwardMae: driftMae, baselineMae };
   }
   return { ...randomWalk, walkForwardMae: baselineMae, baselineMae };
 }
@@ -212,9 +223,19 @@ function quantile(sorted: number[], q: number): number {
   return sorted[lo] + (sorted[hi] - sorted[lo]) * (pos - lo);
 }
 
+function medianOf(values: number[]): number {
+  return quantile([...values].sort((a, b) => a - b), 0.5);
+}
+
+export const MODEL_LABELS: Record<ModelKind, string> = {
+  random_walk: 'Random walk',
+  drift: 'Median drift',
+  ridge: 'Ridge',
+};
+
 /** Forecast of the segment close from `price` with features `x`. `fallbackVol` sizes intervals when history is thin. */
 export function predictSegment(model: SegmentModel, price: number, x: number[], fallbackVol: number): SegmentForecastResult {
-  const ret = model.kind === 'ridge' ? ridgeReturn(model.beta, model.mean, model.std, x) : 0;
+  const ret = model.kind === 'ridge' ? ridgeReturn(model.beta, model.mean, model.std, x) : model.kind === 'drift' ? model.beta[0] : 0;
   const expected = round2(price * Math.exp(ret));
 
   let residuals = model.residuals;

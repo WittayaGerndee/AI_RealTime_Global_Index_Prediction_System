@@ -55,9 +55,12 @@ export interface SegmentForecast extends CloseForecast {
   label: string;
   lock_at: string;
   close_at: string;
-  /** LIVE: still updating • LOCKED: frozen, awaiting close • CLOSED: actual close known */
-  status: 'LIVE' | 'LOCKED' | 'CLOSED';
-  model: 'random_walk' | 'ridge';
+  /**
+   * WAITING: before the lock time, no closing number yet • CALCULATING: lock time reached, waiting
+   * for the lock-time bar • LOCKED: calculated once and frozen • CLOSED: actual close known
+   */
+  status: 'WAITING' | 'CALCULATING' | 'LOCKED' | 'CLOSED';
+  model: 'random_walk' | 'drift' | 'ridge';
   training_sessions: number;
 }
 
@@ -65,7 +68,7 @@ export interface SegmentAccuracy {
   label: string;
   lock_time_th: string;
   total: number;
-  model: 'random_walk' | 'ridge';
+  model: 'random_walk' | 'drift' | 'ridge';
   mae: number;
   mae_pct: number;
   /** MAE of simply using the price at lock time */
