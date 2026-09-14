@@ -16,8 +16,8 @@ EXCHANGE_SCHEDULES: Dict[str, Tuple[str, List[Tuple[str, str, str]]]] = {
     "NIKKEI225": ("Asia/Tokyo", [("09:00", "11:30", "09:15"), ("12:30", "15:30", "12:45")]),
     "HSI": ("Asia/Hong_Kong", [("09:30", "12:00", "10:45"), ("13:00", "16:00", "14:45")]),
     # Shenzhen shares China Standard Time with Shanghai
-    "SZSE": ("Asia/Shanghai", [("09:30", "11:30", "09:45"), ("13:00", "15:00", "13:40")]),
-    "DJI": ("America/New_York", [("09:30", "16:00", "00:45")]),
+    "SZSE": ("Asia/Shanghai", [("09:30", "11:30", "10:15"), ("13:00", "15:00", "13:40")]),
+    "DJI": ("America/New_York", [("09:30", "16:00", "01:25")]),
 }
 
 STATUS_OPEN = "OPEN"

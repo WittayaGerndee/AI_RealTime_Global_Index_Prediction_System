@@ -40,13 +40,13 @@ export const EXCHANGE_SCHEDULES: Record<string, ExchangeSchedule> = {
   SZSE: {
     timezone: 'Asia/Shanghai',
     segments: [
-      { open: '09:30', close: '11:30', lockTh: '09:45' },
+      { open: '09:30', close: '11:30', lockTh: '10:15' },
       { open: '13:00', close: '15:00', lockTh: '13:40' },
     ],
   },
   DJI: {
     timezone: 'America/New_York',
-    segments: [{ open: '09:30', close: '16:00', lockTh: '00:45' }],
+    segments: [{ open: '09:30', close: '16:00', lockTh: '01:25' }],
   },
 };
 

@@ -47,12 +47,12 @@ class TestMarketHours(unittest.TestCase):
 
     def test_dow_follows_us_daylight_saving(self):
         summer = market_hours.get_session_state("DJI", th(2026, 9, 14, 21, 0))["current"]
-        self.assertEqual((th_hhmm(summer.open), th_hhmm(summer.close), th_hhmm(summer.lock_at)), ("20:30", "03:00", "00:45"))
+        self.assertEqual((th_hhmm(summer.open), th_hhmm(summer.close), th_hhmm(summer.lock_at)), ("20:30", "03:00", "01:25"))
         winter = market_hours.get_session_state("DJI", th(2026, 12, 14, 22, 0))["current"]
-        self.assertEqual((th_hhmm(winter.open), th_hhmm(winter.close), th_hhmm(winter.lock_at)), ("21:30", "04:00", "00:45"))
+        self.assertEqual((th_hhmm(winter.open), th_hhmm(winter.close), th_hhmm(winter.lock_at)), ("21:30", "04:00", "01:25"))
 
     def test_segment_lock_times_in_thai_time(self):
-        expected = {"NIKKEI225": ["09:15", "12:45"], "HSI": ["10:45", "14:45"], "SZSE": ["09:45", "13:40"]}
+        expected = {"NIKKEI225": ["09:15", "12:45"], "HSI": ["10:45", "14:45"], "SZSE": ["10:15", "13:40"]}
         for sym, locks in expected.items():
             session = market_hours.get_session_state(sym, th(2026, 9, 14, 10, 0))["current"]
             self.assertEqual([th_hhmm(t) for t in session.segment_locks], locks, sym)
